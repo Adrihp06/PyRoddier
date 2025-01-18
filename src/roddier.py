@@ -9,23 +9,35 @@ def _calculate_phase_roddier(img1, img2):
     return phase_diff
 
 def calculate_phase_roddier(intrafocal, extrafocal):
+    """
+    Calcula el frente de onda a partir de las imágenes intra-focal y extra-focal usando el Test de Roddier.
 
-    difference = intrafocal - extrafocal
+    Args:
+        intrafocal (ndarray): Imagen intra-focal.
+        extrafocal (ndarray): Imagen extra-focal.
+        focal_length (float): Longitud focal del sistema óptico.
+        delta_z (float): Diferencia de desenfoque (intrafocal - extrafocal).
 
-    # Paso 4: Calcular el Laplaciano usando Transformadas de Fourier
+    Returns:
+        wavefront_reconstructed (ndarray): Frente de onda reconstruido.
+    """
+    # Paso 1: Calcular la diferencia escalada
+    difference = (intrafocal - extrafocal)#/ delta_z
+
+    # Paso 2: Transformada de Fourier para resolver la ecuación de Poisson
     ny, nx = difference.shape
     kx = np.fft.fftfreq(nx).reshape(1, -1)
     ky = np.fft.fftfreq(ny).reshape(-1, 1)
     k_squared = kx**2 + ky**2
     k_squared[0, 0] = 1e-10  # Evitar división por cero
 
-    # Transformada de Fourier del Laplaciano
-    laplacian_fft = fft2(difference)
+    # Paso 3: Transformada de Fourier del Laplaciano
+    laplacian_fft = np.fft.fft2(difference)
 
-    # Resolver la ecuación de Poisson en el dominio de Fourier
+    # Paso 4: Resolver la ecuación de Poisson
     wavefront_fft = laplacian_fft / (4 * np.pi**2 * k_squared)
 
-    # Volver al dominio espacial
-    wavefront_reconstructed = np.real(ifft2(wavefront_fft))
+    # Paso 5: Volver al dominio espacial
+    wavefront_reconstructed = np.real(np.fft.ifft2(wavefront_fft))
 
     return wavefront_reconstructed

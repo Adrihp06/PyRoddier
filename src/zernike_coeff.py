@@ -4,7 +4,7 @@ from scipy.linalg import lstsq
 from zernpy import ZernPol
 
 
-def calculate_wavefront_zernike(phase_diff, mask, num_terms=10):
+def _calculate_wavefront_zernike(phase_diff, mask, num_terms=10):
     """
     Calcula los coeficientes de Zernike y reconstruye el frente de onda utilizando un ajuste
     en la región del donut definida por la máscara.
@@ -79,7 +79,7 @@ def recalculate_wavefront_zernike(phase_diff, mask, zernike_coeffs):
 
         return phi_reconstructed_masked
 
-def _calculate_wavefront_zernike(phase_diff, mask, num_terms=10):
+def calculate_wavefront_zernike(phase_diff, mask, num_terms=10):
     """
     Calcula los coeficientes de Zernike y reconstruye el frente de onda utilizando un ajuste
     en la región del donut definida por la máscara, usando zernpy.
