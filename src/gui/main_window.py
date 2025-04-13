@@ -1,8 +1,6 @@
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QCheckBox, QListWidget, QListWidgetItem, QDialog, QSlider, QFrame, QSplitter, QScrollArea, QToolBar, QAction, QMenuBar)
-from PyQt5.QtCore import Qt, QSize, QTimer
-from PyQt5.QtGui import QPixmap, QImage, QPalette, QColor, QFont, QIcon
-import matplotlib
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPixmap, QImage, QIcon
 from matplotlib.colors import Normalize
 from astropy.io import fits
 import numpy as np
@@ -10,9 +8,9 @@ import os
 from core.roddier import calculate_wavefront
 from core.zernike import fit_zernike
 from core.interferometry import calculate_interferogram, analyze_interferogram
-from utils.image_processing import preprocess_images, generate_common_annular_mask, align_images_winroddier, normalize_images
-from gui.dialogs.results import ResultsWindow
-from gui.dialogs.image_crop import ImageCropDialog
+from utils.image_preprocessing import preprocess_winroddier
+from gui.dialogs.roddiertestresults import RoddierTestResultsWindow
+from gui.dialogs.roddiertest import RoddierTestDialog
 
 class FitsViewer(QMainWindow):
     def __init__(self):
@@ -263,8 +261,7 @@ class FitsViewer(QMainWindow):
 
         # Aplicar transformaciones necesarias para imagen extra-focal
         if not is_intrafocal:
-            image_data = np.flipud(np.fliplr(image_data))
-
+            image_data = np.rot90(image_data, k=2)
         # Calcular el centro de masa
         com_y, com_x = self.calculate_center_of_mass(image_data)
 
@@ -327,49 +324,41 @@ class FitsViewer(QMainWindow):
             QMessageBox.warning(self, "Error", "Por favor, carga las imágenes intra y extra-focal primero.")
             return
 
-        # Preprocesar las imágenes antes del recorte
-        preprocessed_intra, preprocessed_extra = preprocess_images(self.intra_image_data, self.extra_image_data)
 
         # Abrir diálogo de recorte y obtener parámetros del telescopio
-        dialog = ImageCropDialog(preprocessed_intra, preprocessed_extra, crop_size=250)
-        if dialog.exec_() == QDialog.Accepted:
+        roddier_dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
+        if roddier_dialog.exec_() == QDialog.Accepted:
             # 2. Obtener imágenes recortadas y parámetros
-            cropped_intra, cropped_extra = dialog.get_cropped_images()
-            normalized_intra, normalized_extra = normalize_images(cropped_intra, cropped_extra)
+            cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
 
-            telescope_params = dialog.get_telescope_params()
-            primary_diameter = telescope_params['primary_diameter']
-            secondary_diameter = telescope_params['secondary_diameter']
+            telescope_params = roddier_dialog.get_telescope_params()
+            apertura = telescope_params['apertura']
+            focal = telescope_params['focal']
             pixel_scale = telescope_params['pixel_scale']
-            masking_value = telescope_params['masking_value']
             max_order = telescope_params['max_order']
-
-            # 3. Alineación
-            intra_aligned, extra_aligned, _ = align_images_winroddier(
-                normalized_intra, normalized_extra, masking_value=masking_value
-            )
-
-            # 4. Generar máscara
-            annular_mask, center, R_in, R_out = generate_common_annular_mask(
-                intra_aligned, extra_aligned,
-                masking_value=masking_value,
-                secondary_diameter_m=secondary_diameter,
-                primary_diameter_m=primary_diameter,
-                pixel_scale_m=pixel_scale
+            binning = telescope_params['binning']
+            iteraciones = telescope_params['iteraciones']
+            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
+                cropped_intra,
+                cropped_extra,
+                apertura=apertura,
+                focal=focal,
+                pixel_scale=pixel_scale,
+                binning=binning,
+                iterations=iteraciones
             )
 
             # 5. Calcular frente de onda
-            wavefront = calculate_wavefront(intra_aligned, extra_aligned, annular_mask, center)
+            wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
 
             # 6. Ajuste de Zernike
-            reconstructed_wavefront, zernike_coeffs, zernike_base = fit_zernike(
-                wavefront, annular_mask, center, max_order
+            zernike_coeffs, zernike_base = fit_zernike(
+                wavefront, annular_mask, R_out, center, max_order
             )
 
             # 7. Crear ventana de resultados (como WinRoddier)
-            results_window = ResultsWindow("Resultados del Test de Roddier", self)
+            results_window = RoddierTestResultsWindow("Resultados del Test de Roddier", self)
             results_window.update_plots(
-                wavefront=reconstructed_wavefront,
                 zernike_coeffs=zernike_coeffs,
                 zernike_base=zernike_base,
                 annular_mask=annular_mask
@@ -384,7 +373,7 @@ class FitsViewer(QMainWindow):
             return
 
         try:
-            dialog = ImageCropDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
+            dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
             if dialog.exec_():
                 intra_focal = dialog.crop_image(dialog.intra_image, dialog.intra_x_offset, dialog.intra_y_offset)
                 extra_focal = dialog.crop_image(dialog.extra_image, dialog.extra_x_offset, dialog.extra_y_offset)
@@ -396,7 +385,7 @@ class FitsViewer(QMainWindow):
                 interferogram = calculate_interferogram(intra_focal)
 
                 # Crear ventana de resultados
-                results_window = ResultsWindow("Resultados de Interferometría", self, show_interferogram=True)
+                results_window = RoddierTestResultsWindow("Resultados de Interferometría", self, show_interferogram=True)
 
                 # Actualizar gráficos con la máscara binaria
                 results_window.update_plots(interferogram, binary_mask=binary_mask)

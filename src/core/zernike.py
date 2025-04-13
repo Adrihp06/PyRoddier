@@ -14,58 +14,72 @@ def zernike_radial(n, m, rho):
         R += coeff * rho ** (n - 2 * k)
     return R
 
-def zernike_polynomials(max_order, R_in, R_out, shape, center):
+def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     """
-    Genera una base de polinomios de Zernike ortonormal sobre una pupila anular.
+    Genera una base ortonormal de polinomios de Zernike sobre una máscara anular,
+    siguiendo el orden de Noll (como lo hace WinRoddier).
 
     Parámetros:
-    - max_order: orden máximo n de los polinomios Zernike
-    - R_in: radio interior (obstrucción central)
-    - R_out: radio exterior de la pupila
-    - shape: tupla (h, w) con el tamaño de la imagen
+    - shape: (alto, ancho) de la imagen
+    - mask: máscara binaria de la pupila (anular)
     - center: (cx, cy) centro de la pupila
+    - max_terms: número máximo de términos a generar (por defecto 23)
 
     Retorna:
-    - zernike_stack: array (n_polinomios, h, w) con cada modo
-    - mask: máscara binaria de la pupila anular
+    - base: lista de arrays 2D con los polinomios ortonormalizados
     """
-    h, w = shape
-    y, x = np.indices((h, w))
+    import numpy as np
+    from scipy.special import factorial as fact
+
+    y, x = np.indices(shape)
     cy, cx = center
     x = x - cx
     y = y - cy
     r = np.sqrt(x**2 + y**2)
     theta = np.arctan2(y, x)
 
-    # Normalizar r sobre la pupila anular a [0, 1]
-    rho = (r - R_in) / (R_out - R_in)
-    mask = (rho >= 0) & (rho <= 1)
+    r /= R_out  # normalizar al radio máximo en la máscara
+    r[mask == 0] = 0
+    theta[mask == 0] = 0
 
-    zernike_stack = []
+    def R(n, m, r):
+        """Polinomio radial de Zernike"""
+        Rnm = np.zeros_like(r)
+        for k in range((n - abs(m)) // 2 + 1):
+            num = (-1)**k * fact(n - k)
+            den = fact(k) * fact((n + abs(m)) // 2 - k) * fact((n - abs(m)) // 2 - k)
+            Rnm += num / den * r**(n - 2 * k)
+        return Rnm
 
-    for n in range(max_order + 1):
-        for m in range(-n, n + 1, 2):
-            Rnm = zernike_radial(n, m, rho)
-            if m == 0:
-                Z = Rnm
-            elif m > 0:
-                Z = Rnm * np.cos(m * theta)
-            else:
-                Z = Rnm * np.sin(-m * theta)
+    def Z(n, m, r, theta):
+        if m == 0:
+            return R(n, 0, r)
+        elif m > 0:
+            return R(n, m, r) * np.cos(m * theta)
+        else:
+            return R(n, -m, r) * np.sin(-m * theta)
 
-            # Normalización como en Noll (anular): sqrt(2(n+1)) excepto para m=0
-            norm = np.sqrt(2 * (n + 1)) if m != 0 else np.sqrt(n + 1)
-            Z *= norm
+    # Índices (n, m) en orden de Noll para los primeros 23 términos
+    noll_indices = [
+        (0, 0), (1, 1), (1, -1), (2, 0), (2, -2), (2, 2),
+        (3, -1), (3, 1), (3, -3), (3, 3), (4, 0),
+        (4, -2), (4, 2), (5, -1), (5, 1), (5, -3), (5, 3),
+        (5, -5), (5, 5), (6, 0), (6, -2), (6, 2), (6, -4)
+    ]
 
-            # Aplicar máscara
-            Z *= mask
+    base = []
+    for idx, (n, m) in enumerate(noll_indices[:max_terms]):
+        Znm = Z(n, m, r, theta)
+        Znm *= mask
 
-            zernike_stack.append(Z)
+        # Normalización Noll sobre la máscara
+        norm_factor = np.sqrt((2 * (n + 1)) if m != 0 else (n + 1))
+        Znm /= np.sqrt(np.sum(Znm**2 * mask))  # ortonormalizar sobre máscara
+        base.append(Znm)
 
-    zernike_stack = np.array(zernike_stack)
-    return zernike_stack, mask
+    return np.array(base)
 
-def fit_zernike(wavefront, mask, center, max_order=10):
+def fit_zernike(wavefront, mask, R_out, center, max_order=10):
     """
     Ajusta una serie de polinomios de Zernike al frente de onda proporcionado.
 
@@ -74,19 +88,12 @@ def fit_zernike(wavefront, mask, center, max_order=10):
     - coeficientes_zernike
     - base_zernike
     """
-    R_out = np.sqrt(np.max((mask * ((np.indices(mask.shape)[1] - center[0]) ** 2 +
-                                     (np.indices(mask.shape)[0] - center[1]) ** 2))))
-    R_in = R_out * 0  # asume sin obstrucción si no se conoce
 
-    base, _ = zernike_polynomials(max_order, R_in, R_out, wavefront.shape, center)
+    base = zernike_polynomials(wavefront.shape, mask, R_out, center, max_order)
 
     masked_wavefront = wavefront[mask]
     masked_base = base[:, mask]
 
     # Mínimos cuadrados para obtener coeficientes
     coeffs, *_ = np.linalg.lstsq(masked_base.T, masked_wavefront, rcond=None)
-
-    # Reconstrucción del frente de onda desde la base y coeficientes
-    wavefront_reconstructed = np.sum(base * coeffs[:, None, None], axis=0) * mask
-
-    return wavefront_reconstructed, coeffs, base
+    return coeffs, base

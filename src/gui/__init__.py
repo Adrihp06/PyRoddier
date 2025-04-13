@@ -1,5 +1,5 @@
 from .main_window import FitsViewer
-from .dialogs.results import ResultsWindow
-from .dialogs.image_crop import ImageCropDialog
+from .dialogs.roddiertestresults import RoddierTestResultsWindow
+from .dialogs.roddiertest import RoddierTestDialog
 
 __all__ = ['FitsViewer', 'ResultsWindow', 'ImageCropDialog']

@@ -1,15 +1,10 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-                          QFrame, QSlider, QMessageBox, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox)
+                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
-from matplotlib.colors import Normalize
 import numpy as np
-from utils.image_processing import preprocess_images, center_image
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 
-class ImageCropDialog(QDialog):
+class RoddierTestDialog(QDialog):
     def __init__(self, intra_image, extra_image, crop_size=250, parent=None):
         super().__init__(parent)
         self.intra_image = intra_image
@@ -19,21 +14,15 @@ class ImageCropDialog(QDialog):
         self.cropped_intra = None
         self.cropped_extra = None
         self.telescope_params = {
-            'primary_diameter': 0.0,  # en mm
-            'secondary_diameter': 0.0,  # en mm
+            'apertura': 0.0,  # en mm
+            'focal': 0.0,  # en mm
             'pixel_scale': 0.0,  # en arcsec/pixel
-            'masking_value': 0.05,  # valor por defecto para la máscara
-            'max_order': 6  # orden máximo de Zernike por defecto
+            'max_order': 6,  # orden máximo de Zernike por defecto
+            'iteraciones': 6  # iteraciones por defecto
         }
 
         # Preprocesar las imágenes
-        self.intra_image, self.extra_image= preprocess_images(intra_image, extra_image)
-
-        # Variables para los desplazamientos
-        self.intra_x_offset = 0
-        self.intra_y_offset = 0
-        self.extra_x_offset = 0
-        self.extra_y_offset = 0
+        self.intra_image, self.extra_image = intra_image, extra_image
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -58,9 +47,6 @@ class ImageCropDialog(QDialog):
         self.intra_layout.addWidget(self.intra_label)
 
         # Botón de centrado para imagen intra-focal
-        self.intra_center_button = QPushButton("Centrar")
-        self.intra_center_button.clicked.connect(lambda: self.center_image("intra"))
-        self.intra_layout.addWidget(self.intra_center_button)
 
         self.image_layout.addWidget(self.intra_container)
 
@@ -76,59 +62,51 @@ class ImageCropDialog(QDialog):
         self.extra_layout.addWidget(self.extra_label)
 
         # Botón de centrado para imagen extra-focal
-        self.extra_center_button = QPushButton("Centrar")
-        self.extra_center_button.clicked.connect(lambda: self.center_image("extra"))
-        self.extra_layout.addWidget(self.extra_center_button)
-
         self.image_layout.addWidget(self.extra_container)
 
         layout.addWidget(self.image_container)
 
-        # Controles para ajustar los recortes (deslizadores)
-        self.slider_container = QFrame()
-        self.slider_container.setFrameStyle(QFrame.StyledPanel)
-        self.slider_layout = QVBoxLayout(self.slider_container)
-        self.add_slider_controls("Intra-focal", self.slider_layout, "intra")
-        self.add_slider_controls("Extra-focal", self.slider_layout, "extra")
-        layout.addWidget(self.slider_container)
-
         # Grupo para los parámetros del telescopio
         telescope_group = QGroupBox("Parámetros del Telescopio")
         telescope_layout = QFormLayout()
-
         # Diámetro del espejo primario
-        self.primary_diameter_spin = QDoubleSpinBox()
-        self.primary_diameter_spin.setRange(0.0, 10000.0)
-        self.primary_diameter_spin.setValue(500.0)  # Valor por defecto en mm
-        self.primary_diameter_spin.setSuffix(" mm")
-        telescope_layout.addRow("Diámetro del espejo primario:", self.primary_diameter_spin)
+        self.apertura = QDoubleSpinBox()
+        self.apertura.setRange(0.0, 2000.0)
+        self.apertura.setValue(900)  # Valor por defecto en mm
+        self.apertura.setSuffix(" mm")
+        telescope_layout.addRow("Apertura del telescopio:", self.apertura)
 
-        # Diámetro del espejo secundario
-        self.secondary_diameter_spin = QDoubleSpinBox()
-        self.secondary_diameter_spin.setRange(0.0, 1000.0)
-        self.secondary_diameter_spin.setValue(300.0)  # Valor por defecto en mm
-        self.secondary_diameter_spin.setSuffix(" mm")
-        telescope_layout.addRow("Diámetro del espejo secundario:", self.secondary_diameter_spin)
+        # focal
+        self.focal = QDoubleSpinBox()
+        self.focal.setRange(0.0, 20000.0)
+        self.focal.setValue(7200)  # Valor por defecto en mm
+        self.focal.setSuffix(" mm")
+        telescope_layout.addRow("Distancia focal:", self.focal)
 
         # Escala de píxel
         self.pixel_scale_spin = QDoubleSpinBox()
         self.pixel_scale_spin.setRange(0.0, 50.0)
-        self.pixel_scale_spin.setValue(28.65)  # Valor por defecto en "/mm
+        self.pixel_scale_spin.setValue(15)  # Valor por defecto en "/mm
         self.pixel_scale_spin.setSuffix(" \"/mm")
         telescope_layout.addRow("Escala de píxel:", self.pixel_scale_spin)
 
-        # Valor de máscara
-        self.masking_value_spin = QDoubleSpinBox()
-        self.masking_value_spin.setRange(0.0, 1.0)
-        self.masking_value_spin.setValue(0.05)  # Valor por defecto
-        self.masking_value_spin.setSingleStep(0.01)
-        telescope_layout.addRow("Valor de máscara:", self.masking_value_spin)
+        # Binning
+        self.binning_spin = QSpinBox()
+        self.binning_spin.setRange(1, 4)
+        self.binning_spin.setValue(1)  # Valor por defecto
+        telescope_layout.addRow("Binning:", self.binning_spin)
+
+        # Iteraciones
+        self.iteraciones_spin = QSpinBox()
+        self.iteraciones_spin.setRange(1, 10)
+        self.iteraciones_spin.setValue(6)  # Valor por defecto
+        telescope_layout.addRow("Iteraciones:", self.iteraciones_spin)
 
         # Orden máximo de Zernike
-        self.max_order_spin = QSpinBox()
-        self.max_order_spin.setRange(1, 20)
-        self.max_order_spin.setValue(6)  # Valor por defecto
-        telescope_layout.addRow("Orden máximo de Zernike:", self.max_order_spin)
+        self.numero_de_terminos = QSpinBox()
+        self.numero_de_terminos.setRange(1, 28)
+        self.numero_de_terminos.setValue(23)  # Valor por defecto
+        telescope_layout.addRow("Número de términos:", self.numero_de_terminos)
 
         telescope_group.setLayout(telescope_layout)
         layout.addWidget(telescope_group)
@@ -137,7 +115,7 @@ class ImageCropDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
-        self.crop_button = QPushButton("Recortar")
+        self.crop_button = QPushButton("Ejecutar el Test de Roddier")
         self.crop_button.clicked.connect(self.crop_images)
         button_layout.addWidget(self.crop_button)
 
@@ -178,23 +156,6 @@ class ImageCropDialog(QDialog):
                 font-size: 14px;
                 padding: 4px;
             }
-            QSlider {
-                height: 20px;
-            }
-            QSlider::groove:horizontal {
-                border: 1px solid #404040;
-                height: 6px;
-                background: #363636;
-                margin: 0px;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #0d47a1;
-                border: none;
-                width: 18px;
-                margin: -6px 0;
-                border-radius: 9px;
-            }
             QFrame {
                 border: 1px solid #404040;
                 border-radius: 4px;
@@ -204,50 +165,8 @@ class ImageCropDialog(QDialog):
         # Mostrar los recortes iniciales
         self.update_images()
 
-    def add_slider_controls(self, label_text, layout, prefix):
-        """Añade controles deslizantes para ajustar los recortes."""
-        group_container = QFrame()
-        group_container.setFrameStyle(QFrame.StyledPanel)
-        group_layout = QVBoxLayout(group_container)
-
-        title = QLabel(f"Ajustes de {label_text}")
-        title.setAlignment(Qt.AlignCenter)
-        group_layout.addWidget(title)
-
-        # Deslizador horizontal
-        x_label = QLabel("Desplazamiento horizontal")
-        x_label.setAlignment(Qt.AlignCenter)
-        group_layout.addWidget(x_label)
-
-        x_slider = QSlider(Qt.Horizontal)
-        x_slider.setRange(-100, 100)
-        x_slider.setValue(0)
-        x_slider.valueChanged.connect(lambda value: self.update_offset(prefix, "x", value))
-        group_layout.addWidget(x_slider)
-
-        # Deslizador vertical
-        y_label = QLabel("Desplazamiento vertical")
-        y_label.setAlignment(Qt.AlignCenter)
-        group_layout.addWidget(y_label)
-
-        y_slider = QSlider(Qt.Horizontal)
-        y_slider.setRange(-100, 100)
-        y_slider.setValue(0)
-        y_slider.valueChanged.connect(lambda value: self.update_offset(prefix, "y", value))
-        group_layout.addWidget(y_slider)
-
-        # Almacenar referencias a los sliders
-        if prefix == "intra":
-            self.intra_x_slider = x_slider
-            self.intra_y_slider = y_slider
-        else:
-            self.extra_x_slider = x_slider
-            self.extra_y_slider = y_slider
-
-        layout.addWidget(group_container)
-
-    def crop_image(self, image, x_offset, y_offset):
-        """Recorta la imagen con los desplazamientos dados, asegurando dimensiones válidas."""
+    def crop_image(self, image):
+        """Recorta la imagen centrada en el centro de masa."""
         # Obtener las dimensiones de la imagen
         height, width = image.shape
         half_size = self.crop_size // 2
@@ -260,8 +179,8 @@ class ImageCropDialog(QDialog):
         com_y = min(max(com_y, half_size), height - half_size)
 
         # Calcular los límites del recorte
-        start_x = com_x - half_size + x_offset
-        start_y = com_y - half_size + y_offset
+        start_x = com_x - half_size
+        start_y = com_y - half_size
 
         # Asegurarse de que los límites están dentro de la imagen
         if start_x < 0:
@@ -287,9 +206,8 @@ class ImageCropDialog(QDialog):
 
     def update_images(self):
         """Actualiza las imágenes recortadas en los QLabel."""
-
-        intra_crop = self.crop_image(self.intra_image, self.intra_x_offset, self.intra_y_offset)
-        extra_crop = self.crop_image(self.extra_image, self.extra_x_offset, self.extra_y_offset)
+        intra_crop = self.crop_image(self.intra_image)
+        extra_crop = self.crop_image(self.extra_image)
 
         self.intra_label.setPixmap(self.create_pixmap(intra_crop))
         self.extra_label.setPixmap(self.create_pixmap(extra_crop))
@@ -315,55 +233,6 @@ class ImageCropDialog(QDialog):
 
         return QPixmap()
 
-    def update_offset(self, prefix, axis, value):
-        """Actualiza los desplazamientos según el deslizador."""
-        if prefix == "intra":
-            if axis == "x":
-                self.intra_x_offset = value
-            elif axis == "y":
-                self.intra_y_offset = value
-        elif prefix == "extra":
-            if axis == "x":
-                self.extra_x_offset = value
-            elif axis == "y":
-                self.extra_y_offset = value
-
-        # Validar que los offsets son válidos antes de actualizar
-        try:
-            self.update_images()
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Recorte inválido: {e}")
-            # Reset sliders to prevent invalid values
-            if prefix == "intra":
-                if axis == "x":
-                    self.intra_x_offset = 0
-                elif axis == "y":
-                    self.intra_y_offset = 0
-            elif prefix == "extra":
-                if axis == "x":
-                    self.extra_x_offset = 0
-                elif axis == "y":
-                    self.extra_y_offset = 0
-
-    def center_image(self, image_type):
-        """Centra la imagen seleccionada usando el centro de masa."""
-        if image_type == "intra":
-            self.intra_image = center_image(self.intra_image)
-            self.intra_x_offset = 0
-            self.intra_y_offset = 0
-            # Resetear los sliders
-            self.intra_x_slider.setValue(0)
-            self.intra_y_slider.setValue(0)
-        else:
-            self.extra_image = center_image(self.extra_image)
-            self.extra_x_offset = 0
-            self.extra_y_offset = 0
-            # Resetear los sliders
-            self.extra_x_slider.setValue(0)
-            self.extra_y_slider.setValue(0)
-
-        # Actualizar la visualización
-        self.update_images()
 
     def calculate_center_of_mass(self, image):
         """Calcula el centro de masa de la imagen."""
@@ -390,28 +259,20 @@ class ImageCropDialog(QDialog):
 
         return int(com_y), int(com_x)
 
-    def on_click(self, event):
-        if event.inaxes:
-            self.crop_center = (int(event.ydata), int(event.xdata))
-            self.crop_images()
-
     def crop_images(self):
         # Guardar los parámetros del telescopio
         self.telescope_params = {
-            'primary_diameter': self.primary_diameter_spin.value(),
-            'secondary_diameter': self.secondary_diameter_spin.value(),
+            'apertura': self.apertura.value(),
+            'focal': self.focal.value(),
             'pixel_scale': self.pixel_scale_spin.value(),
-            'masking_value': self.masking_value_spin.value(),
-            'max_order': self.max_order_spin.value()
+            'binning': self.binning_spin.value(),
+            'max_order': self.numero_de_terminos.value(),
+            'iteraciones': self.iteraciones_spin.value()
         }
 
-        # Recorta cada imagen usando su offset y el centro de masa
-        self.cropped_intra = self.crop_image(
-            self.intra_image, self.intra_x_offset, self.intra_y_offset
-        )
-        self.cropped_extra = self.crop_image(
-            self.extra_image, self.extra_x_offset, self.extra_y_offset
-        )
+        # Recorta cada imagen usando el centro de masa
+        self.cropped_intra = self.crop_image(self.intra_image)
+        self.cropped_extra = self.crop_image(self.extra_image)
 
         self.accept()
 

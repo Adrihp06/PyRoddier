@@ -1,4 +1,4 @@
-from .results import ResultsWindow
-from .image_crop import ImageCropDialog
+from .roddiertestresults import RoddierTestResultsWindow
+from .roddiertest import RoddierTestDialog
 
-__all__ = ['ResultsWindow', 'ImageCropDialog']
+__all__ = ['RoddierTestResultsWindow', 'RoddierTestDialog']
