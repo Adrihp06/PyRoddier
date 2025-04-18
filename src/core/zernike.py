@@ -38,7 +38,7 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     r = np.sqrt(x**2 + y**2)
     theta = np.arctan2(y, x)
 
-    r /= R_out  # normalizar al radio máximo en la máscara
+    r /= R_out
     r[mask == 0] = 0
     theta[mask == 0] = 0
 

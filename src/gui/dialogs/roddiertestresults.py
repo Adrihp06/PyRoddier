@@ -122,16 +122,16 @@ class RoddierTestResultsWindow(QDialog):
         self.wavefront_ax.clear()
         self.wavefront_fig.clf()
         self.wavefront_ax = self.wavefront_fig.add_subplot(111)
-        vlim = np.max(np.abs(active_contrib))
+        #vlim = np.max(np.abs(active_contrib))
 
         # Crear un mapa de colores personalizado que tenga blanco para valores enmascarados
-        cmap = plt.cm.nipy_spectral_r  # Añadir _r para invertir la escala de colores
+        cmap = plt.cm.nipy_spectral # Añadir _r para invertir la escala de colores
         cmap.set_bad('white')  # Establecer el color para valores enmascarados como blanco
 
         # Rotar la imagen 180 grados antes de mostrarla
         active_contrib = np.flipud(active_contrib)
 
-        # Visualizar sin escalas fijas
+        # Visualizar con escalas fijas simétricas
         im = self.wavefront_ax.imshow(
             active_contrib,
             origin='lower',

@@ -1,16 +1,18 @@
-from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QCheckBox, QListWidget, QListWidgetItem, QDialog, QSlider, QFrame, QSplitter, QScrollArea, QToolBar, QAction, QMenuBar)
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QDialog, QFrame, QScrollArea, QToolBar, QAction)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon
 from matplotlib.colors import Normalize
 from astropy.io import fits
 import numpy as np
 import os
-from core.roddier import calculate_wavefront
-from core.zernike import fit_zernike
-from core.interferometry import calculate_interferogram, analyze_interferogram
-from utils.image_preprocessing import preprocess_winroddier
-from gui.dialogs.roddiertestresults import RoddierTestResultsWindow
-from gui.dialogs.roddiertest import RoddierTestDialog
+from src.core.roddier import calculate_wavefront
+from src.core.zernike import fit_zernike
+from src.core.interferometry import calculate_interferogram
+from src.utils.image_preprocessing import preprocess_winroddier
+from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
+from src.gui.dialogs.roddiertest import RoddierTestDialog
+from src.gui.dialogs.interferogramconfig import InterferogramConfigDialog
+from src.gui.dialogs.interferogramresults import InterferogramResultsDialog
 
 class FitsViewer(QMainWindow):
     def __init__(self):
@@ -324,11 +326,8 @@ class FitsViewer(QMainWindow):
             QMessageBox.warning(self, "Error", "Por favor, carga las imágenes intra y extra-focal primero.")
             return
 
-
-        # Abrir diálogo de recorte y obtener parámetros del telescopio
         roddier_dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
         if roddier_dialog.exec_() == QDialog.Accepted:
-            # 2. Obtener imágenes recortadas y parámetros
             cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
 
             telescope_params = roddier_dialog.get_telescope_params()
@@ -337,26 +336,32 @@ class FitsViewer(QMainWindow):
             pixel_scale = telescope_params['pixel_scale']
             max_order = telescope_params['max_order']
             binning = telescope_params['binning']
-            iteraciones = telescope_params['iteraciones']
+            substract_tilt_and_defocus = telescope_params['substract_tilt_and_defocus']
             delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
                 cropped_intra,
                 cropped_extra,
                 apertura=apertura,
                 focal=focal,
                 pixel_scale=pixel_scale,
-                binning=binning,
-                iterations=iteraciones
             )
 
-            # 5. Calcular frente de onda
             wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
 
-            # 6. Ajuste de Zernike
-            zernike_coeffs, zernike_base = fit_zernike(
-                wavefront, annular_mask, R_out, center, max_order
-            )
+            if substract_tilt_and_defocus:
+                zernike_coeffs, zernike_base = fit_zernike(
+                    wavefront, annular_mask, R_out, center, max_order
+                )
 
-            # 7. Crear ventana de resultados (como WinRoddier)
+                # 3. Eliminar aberraciones de bajo orden (Z0–Z3: piston, tip, tilt, defocus)
+                zernike_coeffs[:4] = 0
+
+                # 4. Reconstruir el frente de onda corregido
+                wavefront = np.sum(zernike_base * zernike_coeffs[:, None, None], axis=0)
+
+            zernike_coeffs, zernike_base = fit_zernike(
+                    wavefront, annular_mask, R_out, center, max_order
+                )
+
             results_window = RoddierTestResultsWindow("Resultados del Test de Roddier", self)
             results_window.update_plots(
                 zernike_coeffs=zernike_coeffs,
@@ -364,45 +369,52 @@ class FitsViewer(QMainWindow):
                 annular_mask=annular_mask
             )
 
-            # 8. Mostrar la ventana
             results_window.exec_()
 
     def run_interferometry(self):
         if not self.intra_image_path or not self.extra_image_path:
-            QMessageBox.warning(self, "Error", "Debe cargar ambas imágenes intra y extra-focal.")
+            QMessageBox.warning(self, "Error", "Por favor, carga las imágenes intra y extra-focal primero.")
             return
 
-        try:
-            dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
-            if dialog.exec_():
-                intra_focal = dialog.crop_image(dialog.intra_image, dialog.intra_x_offset, dialog.intra_y_offset)
-                extra_focal = dialog.crop_image(dialog.extra_image, dialog.extra_x_offset, dialog.extra_y_offset)
+        config_dialog = InterferogramConfigDialog(self)
+        if config_dialog.exec_() != QDialog.Accepted:
+            return
 
-                # Generate binary mask
-                annular_mask, center, R_in, R_out = generate_common_annular_mask(intra_focal, extra_focal)
+        config = config_dialog.get_config()
 
-                # Calcular interferograma
-                interferogram = calculate_interferogram(intra_focal)
+        # Luego, obtener las imágenes recortadas
+        dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
+        if dialog.exec_() == QDialog.Accepted:
+            cropped_intra, cropped_extra = dialog.get_cropped_images()
 
-                # Crear ventana de resultados
-                results_window = RoddierTestResultsWindow("Resultados de Interferometría", self, show_interferogram=True)
+            telescope_params = dialog.get_telescope_params()
+            apertura = telescope_params['apertura']
+            focal = telescope_params['focal']
+            pixel_scale = telescope_params['pixel_scale']
+            reference_intensity = config['reference_intensity']
+            reference_frequency = config['reference_frequency']
 
-                # Actualizar gráficos con la máscara binaria
-                results_window.update_plots(interferogram, binary_mask=binary_mask)
+            # Preprocesamiento para obtener delta_I_norm y máscara anular
+            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
+                cropped_intra,
+                cropped_extra,
+                apertura=apertura,
+                focal=focal,
+                pixel_scale=pixel_scale
+            )
+            # Reconstruir frente de onda (W_rec)
+            wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
+            interferogram = calculate_interferogram(reference_intensity,
+                                                        reference_frequency,
+                                                        wavefront,
+                                                        annular_mask)
+            # Crear ventana de resultados
+            results_window = InterferogramResultsDialog("Interferograma simulado", self)
+            results_window.update_plot(interferogram)
+            results_window.exec_()
+        else:
+            QMessageBox.information(self, "Cancelado", "El análisis fue cancelado.")
 
-                # Formatear resultados numéricos
-                results_text = "Análisis de Interferometría:\n"
-                results_text += f"Tamaño del interferograma: {interferogram.shape}\n"
-                results_text += f"Valor máximo: {np.max(interferogram):.4f}\n"
-                results_text += f"Valor mínimo: {np.min(interferogram):.4f}\n"
-
-                results_window.update_results(results_text)
-                results_window.show()
-
-            else:
-                QMessageBox.warning(self, "Cancelado", "El recorte de imágenes fue cancelado.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error en el análisis de interferometría: {e}")
 
     def reset_state(self):
         """Resetea el estado de la aplicación a su estado inicial."""

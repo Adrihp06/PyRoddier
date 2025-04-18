@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox)
+                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox, QCheckBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
 import numpy as np
@@ -18,7 +18,7 @@ class RoddierTestDialog(QDialog):
             'focal': 0.0,  # en mm
             'pixel_scale': 0.0,  # en arcsec/pixel
             'max_order': 6,  # orden máximo de Zernike por defecto
-            'iteraciones': 6  # iteraciones por defecto
+            'substract_tilt_and_defocus': False
         }
 
         # Preprocesar las imágenes
@@ -96,12 +96,9 @@ class RoddierTestDialog(QDialog):
         self.binning_spin.setValue(1)  # Valor por defecto
         telescope_layout.addRow("Binning:", self.binning_spin)
 
-        # Iteraciones
-        self.iteraciones_spin = QSpinBox()
-        self.iteraciones_spin.setRange(1, 10)
-        self.iteraciones_spin.setValue(6)  # Valor por defecto
-        telescope_layout.addRow("Iteraciones:", self.iteraciones_spin)
-
+        self.substract_tilt_and_defocus = QCheckBox()
+        self.substract_tilt_and_defocus.setChecked(False)
+        telescope_layout.addRow("Restar tilt y defocus:", self.substract_tilt_and_defocus)
         # Orden máximo de Zernike
         self.numero_de_terminos = QSpinBox()
         self.numero_de_terminos.setRange(1, 28)
@@ -267,7 +264,7 @@ class RoddierTestDialog(QDialog):
             'pixel_scale': self.pixel_scale_spin.value(),
             'binning': self.binning_spin.value(),
             'max_order': self.numero_de_terminos.value(),
-            'iteraciones': self.iteraciones_spin.value()
+            'substract_tilt_and_defocus': self.substract_tilt_and_defocus.isChecked()
         }
 
         # Recorta cada imagen usando el centro de masa
