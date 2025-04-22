@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Adrián Hernández Padrón
+# Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QDialog, QFrame, QScrollArea, QToolBar, QAction)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon
