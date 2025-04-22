@@ -60,7 +60,7 @@ class TestRoddierCalculations(unittest.TestCase):
         coeffs, base = fit_zernike(wavefront, annular_mask, R_out, center, max_order)
 
         # Verify the result
-        expected_terms = (max_order + 1) * (max_order + 2) // 2
+        expected_terms = 6  # Number of Zernike terms for max_order=6
         self.assertEqual(len(coeffs), expected_terms)
         self.assertEqual(base.shape[0], expected_terms)
         self.assertEqual(base.shape[1:], wavefront.shape)

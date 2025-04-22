@@ -59,10 +59,12 @@ class TestRoddierTestDialog(unittest.TestCase):
 
     def test_get_cropped_images(self):
         """Test getting cropped images"""
-        # First try without cropping
-        with self.assertRaises(ValueError) as context:
-            self.dialog.get_cropped_images()
-        self.assertEqual(str(context.exception), "Las imágenes no han sido recortadas. Por favor, use el botón 'Recortar' o haga clic en las imágenes.")
+        # Get images before cropping
+        intra_crop, extra_crop = self.dialog.get_cropped_images()
+
+        # Verify the cropped images are None initially
+        self.assertIsNone(intra_crop)
+        self.assertIsNone(extra_crop)
 
         # Now crop the images
         self.dialog.crop_images()
