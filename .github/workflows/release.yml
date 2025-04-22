@@ -28,7 +28,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --onefile --windowed src/main.py
+          pyinstaller main.spec
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
