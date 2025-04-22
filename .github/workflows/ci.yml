@@ -21,6 +21,9 @@ jobs:
           pip install -r requirements.txt
           pip install coverage
 
+      - name: Set Qt to offscreen mode
+        run: echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
+
       - name: Run tests
         run: |
           coverage run -m unittest discover -s tests
