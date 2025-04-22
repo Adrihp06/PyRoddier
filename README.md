@@ -1,4 +1,4 @@
-# Astrophysics PyRoddier - Astronomical Image Analysis
+# PyRoddier - Astronomical Image Analysis
 
 This software is designed to detect optical aberrations in telescopes using the Roddier test.
 It analyzes intra- and extrafocal images to compute the wavefront and decompose it into Zernike modes, helping users evaluate the optical quality of their instruments.
