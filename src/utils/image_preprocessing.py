@@ -67,14 +67,14 @@ def estimate_defocus_mm(r_px, pixel_size_um, focal_length_mm, aperture_mm):
     return dz_mm
 
 def preprocess_winroddier(intra_image, extra_image, apertura=900, focal=7200,
-                          pixel_scale=15):
+                          pixel_scale=15, threshold=0.5):
 
     extra_aligned, _ = align_images(intra_image, extra_image)
     intra_aligned = intra_image
     # Normalizar imágenes entre 0 y 1 (ambas con los mismos límites)
     img_avg = 0.5 * (intra_aligned + extra_aligned)
     cx, cy = find_center(img_avg)
-    R_out, R_in = estimate_radii(img_avg, cx, cy, threshold=0.3)
+    R_out, R_in = estimate_radii(img_avg, cx, cy, threshold=threshold)
     dz_mm = estimate_defocus_mm(R_out, pixel_scale, focal, apertura)
     annular_mask = generate_perfect_annular_mask(cx, cy, R_in, R_out, intra_image)
     intra_masked = apply_mask(intra_aligned, annular_mask)

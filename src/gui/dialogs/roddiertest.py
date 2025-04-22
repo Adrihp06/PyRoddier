@@ -18,7 +18,7 @@ class RoddierTestDialog(QDialog):
             'focal': 0.0,  # en mm
             'pixel_scale': 0.0,  # en arcsec/pixel
             'max_order': 6,  # orden máximo de Zernike por defecto
-            'substract_tilt_and_defocus': False
+            'threshold': 0.5  # threshold por defecto
         }
 
         # Preprocesar las imágenes
@@ -96,9 +96,13 @@ class RoddierTestDialog(QDialog):
         self.binning_spin.setValue(1)  # Valor por defecto
         telescope_layout.addRow("Binning:", self.binning_spin)
 
-        self.substract_tilt_and_defocus = QCheckBox()
-        self.substract_tilt_and_defocus.setChecked(False)
-        telescope_layout.addRow("Restar tilt y defocus:", self.substract_tilt_and_defocus)
+        # Threshold
+        self.threshold_spin = QDoubleSpinBox()
+        self.threshold_spin.setRange(0.3, 0.5)
+        self.threshold_spin.setValue(0.5)  # Valor por defecto
+        self.threshold_spin.setSingleStep(0.01)
+        telescope_layout.addRow("Threshold:", self.threshold_spin)
+
         # Orden máximo de Zernike
         self.numero_de_terminos = QSpinBox()
         self.numero_de_terminos.setRange(1, 28)
@@ -257,25 +261,26 @@ class RoddierTestDialog(QDialog):
         return int(com_y), int(com_x)
 
     def crop_images(self):
+        """Guarda los parámetros del telescopio y recorta las imágenes."""
         # Guardar los parámetros del telescopio
-        self.telescope_params = {
+        self.telescope_params.update({
             'apertura': self.apertura.value(),
             'focal': self.focal.value(),
             'pixel_scale': self.pixel_scale_spin.value(),
             'binning': self.binning_spin.value(),
             'max_order': self.numero_de_terminos.value(),
-            'substract_tilt_and_defocus': self.substract_tilt_and_defocus.isChecked()
-        }
+            'threshold': self.threshold_spin.value()
+        })
 
-        # Recorta cada imagen usando el centro de masa
+        # Recortar las imágenes
         self.cropped_intra = self.crop_image(self.intra_image)
         self.cropped_extra = self.crop_image(self.extra_image)
 
+        # Aceptar el diálogo
         self.accept()
 
     def get_cropped_images(self):
-        if self.cropped_intra is None or self.cropped_extra is None:
-            raise ValueError("Las imágenes no han sido recortadas. Por favor, use el botón 'Recortar' o haga clic en las imágenes.")
+        """Devuelve las imágenes recortadas."""
         return self.cropped_intra, self.cropped_extra
 
     def get_telescope_params(self):
@@ -286,6 +291,6 @@ class RoddierTestDialog(QDialog):
             'pixel_scale': self.pixel_scale_spin.value(),
             'binning': self.binning_spin.value(),
             'max_order': self.numero_de_terminos.value(),
-            'substract_tilt_and_defocus': self.substract_tilt_and_defocus.isChecked()
+            'threshold': self.threshold_spin.value()
         })
         return self.telescope_params

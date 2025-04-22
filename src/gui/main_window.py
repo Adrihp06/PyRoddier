@@ -350,27 +350,17 @@ class FitsViewer(QMainWindow):
             pixel_scale = telescope_params['pixel_scale']
             max_order = telescope_params['max_order']
             binning = telescope_params['binning']
-            substract_tilt_and_defocus = telescope_params['substract_tilt_and_defocus']
+            threshold = telescope_params['threshold']
             delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
                 cropped_intra,
                 cropped_extra,
                 apertura=apertura,
                 focal=focal,
                 pixel_scale=pixel_scale,
+                threshold=threshold
             )
 
             wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
-
-            if substract_tilt_and_defocus:
-                zernike_coeffs, zernike_base = fit_zernike(
-                    wavefront, annular_mask, R_out, center, max_order
-                )
-
-                # 3. Eliminar aberraciones de bajo orden (Z0–Z3: piston, tip, tilt, defocus)
-                zernike_coeffs[:4] = 0
-
-                # 4. Reconstruir el frente de onda corregido
-                wavefront = np.sum(zernike_base * zernike_coeffs[:, None, None], axis=0)
 
             zernike_coeffs, zernike_base = fit_zernike(
                     wavefront, annular_mask, R_out, center, max_order
