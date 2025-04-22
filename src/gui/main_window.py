@@ -16,6 +16,17 @@ from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
 from src.gui.dialogs.roddiertest import RoddierTestDialog
 from src.gui.dialogs.interferogramconfig import InterferogramConfigDialog
 from src.gui.dialogs.interferogramresults import InterferogramResultsDialog
+import sys
+
+def get_resource_path(relative_path):
+    """Get the absolute path to a resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+    return os.path.join(base_path, relative_path)
 
 class FitsViewer(QMainWindow):
     def __init__(self):
@@ -37,13 +48,13 @@ class FitsViewer(QMainWindow):
         self.apply_theme()
 
         # Acción para el Test de Roddier
-        self.roddier_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), '..', '..', 'icons', 'roddier.png')), 'Test de Roddier', self)
+        self.roddier_action = QAction(QIcon(get_resource_path('icons/roddier.png')), 'Test de Roddier', self)
         self.roddier_action.setStatusTip('Ejecutar Test de Roddier')
         self.roddier_action.triggered.connect(self.run_roddier_test)
         self.toolbar.addAction(self.roddier_action)
 
         # Acción para Interferometría
-        self.interferometry_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), '..', '..', 'icons', 'interferometry.png')), 'Interferometría', self)
+        self.interferometry_action = QAction(QIcon(get_resource_path('icons/interferometry.png')), 'Interferometría', self)
         self.interferometry_action.setStatusTip('Análisis de Interferometría')
         self.interferometry_action.triggered.connect(self.run_interferometry)
         self.toolbar.addAction(self.interferometry_action)
@@ -52,7 +63,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para resetear con el nuevo icono de papelera
-        self.reset_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), '..', '..', 'icons', 'trash.png')), 'Borrar', self)
+        self.reset_action = QAction(QIcon(get_resource_path('icons/trash.png')), 'Borrar', self)
         self.reset_action.setStatusTip('Limpiar imágenes y resetear estado')
         self.reset_action.triggered.connect(self.reset_state)
         self.toolbar.addAction(self.reset_action)
@@ -61,7 +72,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para centrar imágenes
-        self.center_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), '..', '..', 'icons', 'center.png')), 'Centrar', self)
+        self.center_action = QAction(QIcon(get_resource_path('icons/center.png')), 'Centrar', self)
         self.center_action.setStatusTip('Centrar ambas imágenes')
         self.center_action.triggered.connect(self.center_both_images)
         self.toolbar.addAction(self.center_action)
@@ -70,7 +81,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para cambiar el tema
-        self.theme_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), '..', '..', 'icons', 'theme.png')), 'Cambiar Tema', self)
+        self.theme_action = QAction(QIcon(get_resource_path('icons/theme.png')), 'Cambiar Tema', self)
         self.theme_action.setStatusTip('Cambiar entre modo claro y oscuro')
         self.theme_action.triggered.connect(self.toggle_theme)
         self.toolbar.addAction(self.theme_action)
