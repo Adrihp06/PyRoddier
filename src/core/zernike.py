@@ -17,7 +17,7 @@ def zernike_radial(n, m, rho):
         R += coeff * rho ** (n - 2 * k)
     return R
 
-def zernike_polynomials(shape, mask, R_out, center, max_order=6):
+def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     """
     Genera una base ortonormal de polinomios de Zernike sobre una máscara anular,
     siguiendo el orden de Noll (como lo hace WinRoddier).
@@ -26,7 +26,7 @@ def zernike_polynomials(shape, mask, R_out, center, max_order=6):
     - shape: (alto, ancho) de la imagen
     - mask: máscara binaria de la pupila (anular)
     - center: (cx, cy) centro de la pupila
-    - max_order: orden máximo de los polinomios (por defecto 6)
+    - max_order: orden máximo de los polinomios (por defecto 23)
 
     Retorna:
     - base: lista de arrays 2D con los polinomios ortonormalizados
@@ -63,14 +63,15 @@ def zernike_polynomials(shape, mask, R_out, center, max_order=6):
             return R(n, -m, r) * np.sin(-m * theta)
 
     # Generar todos los índices (n, m) hasta el orden máximo
-    indices = []
-    for n in range(max_order + 1):
-        for m in range(-n, n + 1):
-            if (n - abs(m)) % 2 == 0:  # Solo términos válidos
-                indices.append((n, m))
+    noll_indices = [
+        (0, 0), (1, 1), (1, -1), (2, 0), (2, -2), (2, 2),
+        (3, -1), (3, 1), (3, -3), (3, 3), (4, 0),
+        (4, -2), (4, 2), (5, -1), (5, 1), (5, -3), (5, 3),
+        (5, -5), (5, 5), (6, 0), (6, -2), (6, 2), (6, -4)
+    ]
 
     base = []
-    for n, m in indices:
+    for idx, (n, m) in enumerate(noll_indices[:max_terms]):
         Znm = Z(n, m, r, theta)
         Znm *= mask
 
@@ -81,7 +82,7 @@ def zernike_polynomials(shape, mask, R_out, center, max_order=6):
 
     return np.array(base)
 
-def fit_zernike(wavefront, mask, R_out, center, max_order=6):
+def fit_zernike(wavefront, mask, R_out, center, max_order=10):
     """
     Ajusta una serie de polinomios de Zernike al frente de onda proporcionado.
 
