@@ -46,3 +46,4 @@ wheels/
 .coverage
 .vscode
 roddier_test.ipynb
+.DS_Store
