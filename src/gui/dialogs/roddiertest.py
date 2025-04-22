@@ -279,4 +279,13 @@ class RoddierTestDialog(QDialog):
         return self.cropped_intra, self.cropped_extra
 
     def get_telescope_params(self):
+        """Obtiene los parámetros actuales del telescopio desde los widgets."""
+        self.telescope_params.update({
+            'apertura': self.apertura.value(),
+            'focal': self.focal.value(),
+            'pixel_scale': self.pixel_scale_spin.value(),
+            'binning': self.binning_spin.value(),
+            'max_order': self.numero_de_terminos.value(),
+            'substract_tilt_and_defocus': self.substract_tilt_and_defocus.isChecked()
+        })
         return self.telescope_params

@@ -23,6 +23,13 @@ class InterferogramResultsDialog(QDialog):
 
     def update_plot(self, interferogram):
         """Actualiza el plot con el interferograma."""
+        if interferogram is None:
+            raise ValueError("El interferograma no puede ser None")
+        if not isinstance(interferogram, np.ndarray):
+            raise ValueError("El interferograma debe ser un array de NumPy")
+        if interferogram.size == 0:
+            raise ValueError("El interferograma no puede estar vacío")
+
         self.ax.clear()
 
         # Mostrar el interferograma

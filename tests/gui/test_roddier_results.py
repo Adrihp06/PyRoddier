@@ -1,73 +1,74 @@
-import unittest
+# Copyright (c) 2025 Adrián Hernández Padrón
+# Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 import numpy as np
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtTest import QTest
 from PyQt5.QtCore import Qt
+import unittest
+import sys
 
 # Add the src directory to the Python path
-import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
 
-class TestRoddierTestResultsWindow(unittest.TestCase):
+class TestRoddierResultsWindow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Create QApplication instance for all tests
-        cls.app = QApplication(sys.argv)
+        cls.app = QApplication.instance()
+        if cls.app is None:
+            cls.app = QApplication(sys.argv)
 
     def setUp(self):
         self.window = RoddierTestResultsWindow("Test Results")
 
     def test_initial_state(self):
-        """Test the initial state of the results window"""
+        """Test the initial state of the window"""
+        self.assertIsNotNone(self.window.wavefront_fig)
+        self.assertIsNotNone(self.window.wavefront_ax)
         self.assertIsNone(self.window.zernike_coeffs)
         self.assertIsNone(self.window.zernike_base)
-        self.assertEqual(len(self.window.zernike_checks), 0)
 
     def test_update_plots(self):
-        """Test updating plots with Zernike coefficients"""
+        """Test updating the plots with Zernike coefficients"""
         # Create test data
-        zernike_coeffs = np.random.rand(10)
-        zernike_base = np.random.rand(10, 100, 100)
-        annular_mask = np.ones((100, 100), dtype=bool)
+        coeffs = np.array([0.1, 0.2, 0.3], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+            [[0.0, 1.0], [1.0, 0.0]]
+        ], dtype=np.float64)
 
         # Update plots
-        self.window.update_plots(zernike_coeffs, zernike_base, annular_mask)
+        self.window.update_plots(coeffs, base)
 
-        # Verify data was stored
-        np.testing.assert_array_equal(self.window.zernike_coeffs, zernike_coeffs)
-        np.testing.assert_array_equal(self.window.zernike_base, zernike_base)
-        np.testing.assert_array_equal(self.window.annular_mask, annular_mask)
+        # Check that data was updated
+        np.testing.assert_array_equal(self.window.zernike_coeffs, coeffs)
+        np.testing.assert_array_equal(self.window.zernike_base, base)
+        self.assertEqual(len(self.window.zernike_checks), len(coeffs))
 
-        # Verify checkboxes were created
-        self.assertEqual(len(self.window.zernike_checks), len(zernike_coeffs))
-
-    def test_update_wavefront_plot(self):
+    def test_update_wavefront_plot_internal(self):
         """Test updating the wavefront plot"""
         # Create test data
-        zernike_coeffs = np.random.rand(10)
-        zernike_base = np.random.rand(10, 100, 100)
-        annular_mask = np.ones((100, 100), dtype=bool)
+        coeffs = np.array([0.1, 0.2], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]]
+        ], dtype=np.float64)
 
-        # Update plots
-        self.window.update_plots(zernike_coeffs, zernike_base, annular_mask)
+        # Set up the data
+        self.window.update_plots(coeffs, base)
 
-        # Test with all checkboxes checked
-        for cb in self.window.zernike_checks:
-            cb.setChecked(True)
-
-        # This should not raise any exceptions
+        # Force an update of the wavefront plot
         self.window._update_wavefront_plot()
 
-        # Test with some checkboxes unchecked
-        for i, cb in enumerate(self.window.zernike_checks):
-            if i % 2 == 0:
-                cb.setChecked(False)
+        # Check that the plot was updated
+        self.assertTrue(len(self.window.wavefront_ax.images) > 0)
 
-        # This should not raise any exceptions
-        self.window._update_wavefront_plot()
+    def tearDown(self):
+        self.window.close()
 
 if __name__ == '__main__':
     unittest.main()

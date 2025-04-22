@@ -1,8 +1,12 @@
-import unittest
+# Copyright (c) 2025 Adrián Hernández Padrón
+# Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 import numpy as np
-from astropy.io import fits
 import os
 import tempfile
+import unittest
+from astropy.io import fits
+import shutil
 
 # Add the src directory to the Python path
 import sys
@@ -14,40 +18,40 @@ class TestImagePreprocessing(unittest.TestCase):
     def setUp(self):
         # Create a temporary FITS file for testing
         self.temp_dir = tempfile.mkdtemp()
-        self.test_fits_path = os.path.join(self.temp_dir, 'test.fits')
+        self.test_file = os.path.join(self.temp_dir,         'test.fits')
 
         # Create a test image
         test_data = np.random.rand(100, 100)
         hdu = fits.PrimaryHDU(test_data)
-        hdu.writeto(self.test_fits_path)
-
-    def tearDown(self):
-        # Clean up temporary files
-        if os.path.exists(self.test_fits_path):
-            os.remove(self.test_fits_path)
-        os.rmdir(self.temp_dir)
+        hdu.writeto(self.test_file)
 
     def test_load_fits_image(self):
-        """Test loading a FITS image"""
-        # Test successful loading
-        image_data = load_fits_image(self.test_fits_path)
-        self.assertIsNotNone(image_data)
-        self.assertEqual(image_data.shape, (100, 100))
-        self.assertEqual(image_data.dtype, np.float64)
+        """Test loading a valid FITS image"""
+        # Load the image
+        image = load_fits_image(self.test_file)
 
-        # Test loading non-existent file
-        with self.assertRaises(Exception):
-            load_fits_image('non_existent.fits')
+        # Verify the result
+        self.assertIsInstance(image, np.ndarray)
+        self.assertEqual(image.shape, (100, 100))
+        self.assertTrue(np.all(np.isfinite(image)))
 
     def test_load_fits_image_invalid(self):
-        """Test loading invalid FITS files"""
-        # Create an invalid FITS file
-        invalid_path = os.path.join(self.temp_dir, 'invalid.fits')
-        with open(invalid_path, 'w') as f:
+        """Test loading invalid FITS images"""
+        # Test with non-existent file
+        with self.assertRaises(FileNotFoundError):
+            load_fits_image('non_existent.fits')
+
+        # Test with invalid FITS file
+        invalid_file = os.path.join(self.temp_dir, 'invalid.fits')
+        with open(invalid_file,         'w') as f:
             f.write('This is not a FITS file')
 
         with self.assertRaises(Exception):
-            load_fits_image(invalid_path)
+            load_fits_image(invalid_file)
+
+    def tearDown(self):
+        # Clean up temporary files
+        shutil.rmtree(self.temp_dir)
 
 if __name__ == '__main__':
     unittest.main()

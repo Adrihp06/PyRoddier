@@ -1,7 +1,10 @@
-import unittest
+# Copyright (c) 2025 Adrián Hernández Padrón
+# Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 import numpy as np
 from scipy.fft import fftshift, fft2, ifft2
 from scipy.ndimage import center_of_mass, shift
+import unittest
 
 # Add the src directory to the Python path
 import sys
@@ -15,14 +18,14 @@ from src.core.interferometry import calculate_interferogram
 class TestRoddierCalculations(unittest.TestCase):
     def setUp(self):
         # Create test images
-        self.size = 100
-        self.intra_image = np.zeros((self.size, self.size))
-        self.extra_image = np.zeros((self.size, self.size))
+        size = 100
+        x, y = np.meshgrid(np.linspace(-1, 1, size), np.linspace(-1, 1, size))
+        r = np.sqrt(x**2 + y**2)
 
-        # Add a bright spot in the center
-        center = self.size // 2
-        self.intra_image[center-5:center+5, center-5:center+5] = 1.0
-        self.extra_image[center-5:center+5, center-5:center+5] = 1.0
+        # Create Gaussian spots with different intensities
+        self.intra_image = np.exp(-r**2 / 0.2**2)
+        self.extra_image = 1.2 * np.exp(-r**2 / 0.2**2)  # Slightly brighter
+        self.size = size
 
     def test_calculate_wavefront(self):
         """Test wavefront calculation"""
@@ -40,9 +43,15 @@ class TestRoddierCalculations(unittest.TestCase):
 
     def test_fit_zernike(self):
         """Test Zernike polynomial fitting"""
-        # Create test wavefront
-        wavefront = np.random.rand(self.size, self.size)
-        annular_mask = np.ones_like(wavefront, dtype=bool)
+        # Create test wavefront with known properties
+        x, y = np.meshgrid(np.linspace(-1, 1, self.size), np.linspace(-1, 1, self.size))
+        r = np.sqrt(x**2 + y**2)
+        theta = np.arctan2(y, x)
+
+        # Create a simple wavefront (defocus term)
+        wavefront = 2 * r**2 - 1  # Simple defocus term
+        annular_mask = r <= 1  # Circular mask
+
         R_out = self.size / 2
         center = (self.size // 2, self.size // 2)
         max_order = 6
@@ -51,8 +60,9 @@ class TestRoddierCalculations(unittest.TestCase):
         coeffs, base = fit_zernike(wavefront, annular_mask, R_out, center, max_order)
 
         # Verify the result
-        self.assertEqual(len(coeffs), (max_order + 1) * (max_order + 2) // 2)
-        self.assertEqual(base.shape[0], len(coeffs))
+        expected_terms = (max_order + 1) * (max_order + 2) // 2
+        self.assertEqual(len(coeffs), expected_terms)
+        self.assertEqual(base.shape[0], expected_terms)
         self.assertEqual(base.shape[1:], wavefront.shape)
 
     def test_calculate_interferogram(self):

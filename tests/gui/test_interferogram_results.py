@@ -1,11 +1,14 @@
-import unittest
+# Copyright (c) 2025 Adrián Hernández Padrón
+# Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 import numpy as np
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtTest import QTest
 from PyQt5.QtCore import Qt
+import unittest
+import sys
 
 # Add the src directory to the Python path
-import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
@@ -14,8 +17,9 @@ from src.gui.dialogs.interferogramresults import InterferogramResultsDialog
 class TestInterferogramResultsDialog(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Create QApplication instance for all tests
-        cls.app = QApplication(sys.argv)
+        cls.app = QApplication.instance()
+        if cls.app is None:
+            cls.app = QApplication(sys.argv)
 
     def setUp(self):
         self.dialog = InterferogramResultsDialog("Test Results")
@@ -41,12 +45,17 @@ class TestInterferogramResultsDialog(unittest.TestCase):
     def test_update_plot_invalid(self):
         """Test updating the plot with invalid data"""
         # Test with None
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(ValueError) as context:
             self.dialog.update_plot(None)
+        self.assertEqual(str(context.exception), "El interferograma no puede ser None")
 
         # Test with empty array
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as context:
             self.dialog.update_plot(np.array([]))
+        self.assertEqual(str(context.exception), "El interferograma no puede estar vacío")
+
+    def tearDown(self):
+        self.dialog.close()
 
 if __name__ == '__main__':
     unittest.main()
