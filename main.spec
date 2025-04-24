@@ -39,7 +39,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icons/app.ico' if os.name == 'nt' else None  # ❓ Opcional si tienes .ico para Windows
+    icon=None
+    # icon='icons/app.ico' if os.name == 'nt' else None  # ❓ Opcional si tienes .ico para Windows
 )
 
 app = BUNDLE(
