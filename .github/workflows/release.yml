@@ -27,6 +27,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build executable
+        shell: bash
         run: |
           export APP_NAME="pyroddier-${{ matrix.os }}-${{ github.ref_name }}"
           pyinstaller src/main.py \
