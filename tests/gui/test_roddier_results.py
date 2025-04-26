@@ -28,8 +28,15 @@ class TestRoddierResultsWindow(unittest.TestCase):
         """Test the initial state of the window"""
         self.assertIsNotNone(self.window.wavefront_fig)
         self.assertIsNotNone(self.window.wavefront_ax)
+        self.assertIsNotNone(self.window.interferogram_fig)
+        self.assertIsNotNone(self.window.interferogram_ax)
+        self.assertIsNotNone(self.window.psf_fig)
+        self.assertIsNotNone(self.window.psf_ax)
         self.assertIsNone(self.window.zernike_coeffs)
         self.assertIsNone(self.window.zernike_base)
+        self.assertIsNone(self.window.annular_mask)
+        self.assertIsNone(self.window.interferogram_params)
+        self.assertIsNone(self.window.telescope_params)
 
     def test_update_plots(self):
         """Test updating the plots with Zernike coefficients"""
@@ -40,13 +47,33 @@ class TestRoddierResultsWindow(unittest.TestCase):
             [[1.0, 1.0], [1.0, 1.0]],
             [[0.0, 1.0], [1.0, 0.0]]
         ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        interferogram_params = {
+            'fringes': 4,
+            'reference_frequency': 1.0,
+            'reference_intensity': 0.5
+        }
+        telescope_params = {
+            'apertura': 200.0,
+            'focal': 1000.0,
+            'tamano_pixel': 5.5
+        }
 
         # Update plots
-        self.window.update_plots(coeffs, base)
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params=interferogram_params,
+            telescope_params=telescope_params
+        )
 
         # Check that data was updated
         np.testing.assert_array_equal(self.window.zernike_coeffs, coeffs)
         np.testing.assert_array_equal(self.window.zernike_base, base)
+        np.testing.assert_array_equal(self.window.annular_mask, annular_mask)
+        self.assertEqual(self.window.interferogram_params, interferogram_params)
+        self.assertEqual(self.window.telescope_params, telescope_params)
         self.assertEqual(len(self.window.zernike_checks), len(coeffs))
 
     def test_update_wavefront_plot_internal(self):
@@ -57,15 +84,34 @@ class TestRoddierResultsWindow(unittest.TestCase):
             [[1.0, 0.0], [0.0, 1.0]],
             [[1.0, 1.0], [1.0, 1.0]]
         ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        interferogram_params = {
+            'fringes': 4,
+            'reference_frequency': 1.0,
+            'reference_intensity': 0.5
+        }
+        telescope_params = {
+            'apertura': 200.0,
+            'focal': 1000.0,
+            'tamano_pixel': 5.5
+        }
 
         # Set up the data
-        self.window.update_plots(coeffs, base)
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params=interferogram_params,
+            telescope_params=telescope_params
+        )
 
         # Force an update of the wavefront plot
         self.window._update_wavefront_plot()
 
         # Check that the plot was updated
         self.assertTrue(len(self.window.wavefront_ax.images) > 0)
+        self.assertTrue(len(self.window.interferogram_ax.images) > 0)
+        self.assertTrue(len(self.window.psf_ax.images) > 0)
 
     def tearDown(self):
         self.window.close()

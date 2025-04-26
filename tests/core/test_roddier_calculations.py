@@ -68,16 +68,16 @@ class TestRoddierCalculations(unittest.TestCase):
     def test_calculate_interferogram(self):
         """Test interferogram calculation"""
         # Create test data
-        reference_intensity = 1.0
-        reference_frequency = 0.1
         wavefront = np.random.rand(self.size, self.size)
         annular_mask = np.ones_like(wavefront, dtype=bool)
+        reference_frequency = 0.1
+        reference_intensity = 1.0
 
         # Calculate interferogram
         interferogram = calculate_interferogram(
-            reference_intensity,
-            reference_frequency,
             wavefront,
+            reference_frequency,
+            reference_intensity,
             annular_mask
         )
 

@@ -42,10 +42,13 @@ class TestRoddierTestDialog(unittest.TestCase):
 
     def test_get_telescope_params(self):
         """Test getting telescope parameters"""
-        # Set some values
-        self.dialog.apertura_edit.setText("900.0")
+        # Set all required values
+        self.dialog.espejo_primario_edit.setText("100.0")
+        self.dialog.espejo_secundario_edit.setText("50.0")
         self.dialog.focal_edit.setText("7200.0")
+        self.dialog.apertura_edit.setText("900.0")
         self.dialog.tamano_pixel_edit.setText("15.0")
+        self.dialog.binning_edit.setText("1x1")
 
         # Get parameters
         params = self.dialog.get_telescope_params()
@@ -54,9 +57,20 @@ class TestRoddierTestDialog(unittest.TestCase):
         self.assertEqual(params['apertura'], 900.0)
         self.assertEqual(params['focal'], 7200.0)
         self.assertEqual(params['tamano_pixel'], 15.0)
+        self.assertEqual(params['espejo_primario'], 100.0)
+        self.assertEqual(params['espejo_secundario'], 50.0)
+        self.assertEqual(params['binning'], "1x1")
 
     def test_get_cropped_images(self):
         """Test getting cropped images"""
+        # Set all required values
+        self.dialog.espejo_primario_edit.setText("100.0")
+        self.dialog.espejo_secundario_edit.setText("50.0")
+        self.dialog.focal_edit.setText("7200.0")
+        self.dialog.apertura_edit.setText("900.0")
+        self.dialog.tamano_pixel_edit.setText("15.0")
+        self.dialog.binning_edit.setText("1x1")
+
         # Get images before cropping
         intra_crop, extra_crop = self.dialog.get_cropped_images()
 
