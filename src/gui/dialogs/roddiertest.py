@@ -1,28 +1,55 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox, QCheckBox)
+                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox, QCheckBox,
+                          QFileDialog, QLineEdit, QMessageBox, QComboBox, QInputDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
 import numpy as np
+import os
+from src.core.telescope import TelescopeParams
+from src.common.config import get_config_paths
+import json
 
 class RoddierTestDialog(QDialog):
     def __init__(self, intra_image, extra_image, crop_size=250, parent=None):
         super().__init__(parent)
+        self.setWindowTitle("Test de Roddier")
+        self.setModal(True)
+
+        # Get configuration paths
+        config_paths = get_config_paths()
+        self.config_path = config_paths['telescope_dir']
+
+        # Preprocesar las imágenes
         self.intra_image = intra_image
         self.extra_image = extra_image
         self.crop_size = crop_size
         self.crop_center = None
         self.cropped_intra = None
         self.cropped_extra = None
+
+        # Telescope parameters
         self.telescope_params = {
-            'apertura': 0.0,  # en mm
+            'espejo_primario': 0.0,  # en mm
+            'espejo_secundario': 0.0,  # en mm
             'focal': 0.0,  # en mm
-            'pixel_scale': 0.0,  # en arcsec/pixel
-            'max_order': 6,  # orden máximo de Zernike por defecto
-            'threshold': 0.5  # threshold por defecto
+            'apertura': 0.0,  # en mm
+            'tamano_pixel': 0.0,  # en micras
+            'binning': "1x1"  # formato "NxN"
         }
 
-        # Preprocesar las imágenes
-        self.intra_image, self.extra_image = intra_image, extra_image
+        # Roddier test parameters
+        self.roddier_params = {
+            'max_order': 23,  # orden máximo de Zernike
+            'threshold': 0.5,  # threshold para la máscara
+            'crop_size': crop_size  # tamaño del recorte
+        }
+
+        # Interferogram parameters
+        self.interferogram_params = {
+            'fringes': 4,  # número de franjas horizontales
+            'reference_frequency': 1.0,  # frecuencia de referencia
+            'reference_intensity': 0.5  # intensidad de referencia
+        }
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -45,9 +72,6 @@ class RoddierTestDialog(QDialog):
         self.intra_label = QLabel(self)
         self.intra_label.setAlignment(Qt.AlignCenter)
         self.intra_layout.addWidget(self.intra_label)
-
-        # Botón de centrado para imagen intra-focal
-
         self.image_layout.addWidget(self.intra_container)
 
         # Contenedor para imagen extra-focal
@@ -60,8 +84,6 @@ class RoddierTestDialog(QDialog):
         self.extra_label = QLabel(self)
         self.extra_label.setAlignment(Qt.AlignCenter)
         self.extra_layout.addWidget(self.extra_label)
-
-        # Botón de centrado para imagen extra-focal
         self.image_layout.addWidget(self.extra_container)
 
         layout.addWidget(self.image_container)
@@ -69,48 +91,78 @@ class RoddierTestDialog(QDialog):
         # Grupo para los parámetros del telescopio
         telescope_group = QGroupBox("Parámetros del Telescopio")
         telescope_layout = QFormLayout()
-        # Diámetro del espejo primario
-        self.apertura = QDoubleSpinBox()
-        self.apertura.setRange(0.0, 2000.0)
-        self.apertura.setValue(900)  # Valor por defecto en mm
-        self.apertura.setSuffix(" mm")
-        telescope_layout.addRow("Apertura del telescopio:", self.apertura)
 
-        # focal
-        self.focal = QDoubleSpinBox()
-        self.focal.setRange(0.0, 20000.0)
-        self.focal.setValue(7200)  # Valor por defecto en mm
-        self.focal.setSuffix(" mm")
-        telescope_layout.addRow("Distancia focal:", self.focal)
+        # Campo para espejo primario
+        self.espejo_primario_edit = QLineEdit()
+        telescope_layout.addRow("Espejo primario (mm):", self.espejo_primario_edit)
 
-        # Escala de píxel
-        self.pixel_scale_spin = QDoubleSpinBox()
-        self.pixel_scale_spin.setRange(0.0, 50.0)
-        self.pixel_scale_spin.setValue(15)  # Valor por defecto en "/mm
-        self.pixel_scale_spin.setSuffix(" \"/mm")
-        telescope_layout.addRow("Escala de píxel:", self.pixel_scale_spin)
+        # Campo para espejo secundario
+        self.espejo_secundario_edit = QLineEdit()
+        telescope_layout.addRow("Espejo secundario (mm):", self.espejo_secundario_edit)
 
-        # Binning
-        self.binning_spin = QSpinBox()
-        self.binning_spin.setRange(1, 4)
-        self.binning_spin.setValue(1)  # Valor por defecto
-        telescope_layout.addRow("Binning:", self.binning_spin)
+        # Campo para focal
+        self.focal_edit = QLineEdit()
+        telescope_layout.addRow("Focal (mm):", self.focal_edit)
 
-        # Threshold
-        self.threshold_spin = QDoubleSpinBox()
-        self.threshold_spin.setRange(0.3, 0.5)
-        self.threshold_spin.setValue(0.5)  # Valor por defecto
-        self.threshold_spin.setSingleStep(0.01)
-        telescope_layout.addRow("Threshold:", self.threshold_spin)
+        # Campo para apertura
+        self.apertura_edit = QLineEdit()
+        telescope_layout.addRow("Apertura (mm):", self.apertura_edit)
 
-        # Orden máximo de Zernike
-        self.numero_de_terminos = QSpinBox()
-        self.numero_de_terminos.setRange(1, 28)
-        self.numero_de_terminos.setValue(23)  # Valor por defecto
-        telescope_layout.addRow("Número de términos:", self.numero_de_terminos)
+        # Campo para tamaño de pixel
+        self.tamano_pixel_edit = QLineEdit()
+        telescope_layout.addRow("Tamaño de pixel (μm):", self.tamano_pixel_edit)
+
+        # Campo para binning
+        self.binning_edit = QLineEdit()
+        self.binning_edit.setText("1x1")
+        telescope_layout.addRow("Binning:", self.binning_edit)
+
+        # ComboBox para cargar configuraciones
+        self.config_combo = QComboBox()
+        self.config_combo.currentIndexChanged.connect(self.load_selected_config)
+        telescope_layout.addRow("Cargar configuración:", self.config_combo)
 
         telescope_group.setLayout(telescope_layout)
         layout.addWidget(telescope_group)
+
+        # Grupo para parámetros del test de Roddier
+        roddier_group = QGroupBox("Parámetros del Test de Roddier")
+        roddier_layout = QFormLayout()
+
+        # Campo para max_order
+        self.max_order_edit = QLineEdit()
+        self.max_order_edit.setText("23")
+        roddier_layout.addRow("Orden máximo de Zernike:", self.max_order_edit)
+
+        # Campo para threshold
+        self.threshold_edit = QLineEdit()
+        self.threshold_edit.setText("0.5")
+        roddier_layout.addRow("Threshold:", self.threshold_edit)
+
+        roddier_group.setLayout(roddier_layout)
+        layout.addWidget(roddier_group)
+
+        # Grupo para parámetros del interferograma
+        interferogram_group = QGroupBox("Parámetros del Interferograma")
+        interferogram_layout = QFormLayout()
+
+        # Campo para número de franjas
+        self.fringes_edit = QLineEdit()
+        self.fringes_edit.setText("4")
+        interferogram_layout.addRow("Número de franjas horizontales:", self.fringes_edit)
+
+        # Campo para frecuencia de referencia
+        self.reference_freq_edit = QLineEdit()
+        self.reference_freq_edit.setText("1.0")
+        interferogram_layout.addRow("Frecuencia de referencia:", self.reference_freq_edit)
+
+        # Campo para intensidad de referencia
+        self.reference_intensity_edit = QLineEdit()
+        self.reference_intensity_edit.setText("0.5")
+        interferogram_layout.addRow("Intensidad de referencia:", self.reference_intensity_edit)
+
+        interferogram_group.setLayout(interferogram_layout)
+        layout.addWidget(interferogram_group)
 
         # Botones para confirmar o cancelar
         button_layout = QHBoxLayout()
@@ -125,6 +177,9 @@ class RoddierTestDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         layout.addLayout(button_layout)
+
+        # Cargar configuraciones disponibles
+        self.load_configurations()
 
         # Aplicar el mismo estilo que la ventana principal
         self.setStyleSheet("""
@@ -161,86 +216,47 @@ class RoddierTestDialog(QDialog):
                 border: 1px solid #404040;
                 border-radius: 4px;
             }
+            QLineEdit {
+                background-color: #363636;
+                color: white;
+                border: 1px solid #404040;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QGroupBox {
+                border: 1px solid #404040;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+            }
+            QComboBox {
+                background-color: #363636;
+                color: white;
+                border: 1px solid #404040;
+                border-radius: 4px;
+                padding: 4px;
+            }
         """)
 
         # Mostrar los recortes iniciales
         self.update_images()
 
     def crop_image(self, image):
-        """Recorta la imagen centrada en el centro de masa."""
-        # Obtener las dimensiones de la imagen
-        height, width = image.shape
-        half_size = self.crop_size // 2
+        """Recorta la imagen al tamaño especificado centrada en el centro de masa."""
+        if image is None:
+            return None
 
         # Calcular el centro de masa
-        com_y, com_x = self.calculate_center_of_mass(image)
-
-        # Asegurarse de que el centro de masa es válido
-        com_x = min(max(com_x, half_size), width - half_size)
-        com_y = min(max(com_y, half_size), height - half_size)
-
-        # Calcular los límites del recorte
-        start_x = com_x - half_size
-        start_y = com_y - half_size
-
-        # Asegurarse de que los límites están dentro de la imagen
-        if start_x < 0:
-            start_x = 0
-        if start_y < 0:
-            start_y = 0
-        if start_x + self.crop_size > width:
-            start_x = width - self.crop_size
-        if start_y + self.crop_size > height:
-            start_y = height - self.crop_size
-
-        # Realizar el recorte
-        cropped_image = image[start_y:start_y + self.crop_size, start_x:start_x + self.crop_size]
-
-        # Verificar que el recorte tiene las dimensiones correctas
-        if cropped_image.shape != (self.crop_size, self.crop_size):
-            # Si el recorte no tiene el tamaño correcto, rellenar con ceros
-            result = np.zeros((self.crop_size, self.crop_size))
-            result[:cropped_image.shape[0], :cropped_image.shape[1]] = cropped_image
-            return result
-
-        return cropped_image
-
-    def update_images(self):
-        """Actualiza las imágenes recortadas en los QLabel."""
-        intra_crop = self.crop_image(self.intra_image)
-        extra_crop = self.crop_image(self.extra_image)
-
-        self.intra_label.setPixmap(self.create_pixmap(intra_crop))
-        self.extra_label.setPixmap(self.create_pixmap(extra_crop))
-
-    def create_pixmap(self, image_data):
-        """Converts image data into a QPixmap for display in QLabel."""
-        if image_data is not None and np.any(image_data):
-            # Normalizar la imagen para visualización
-            normalized = image_data - np.min(image_data)
-            if np.max(normalized) > 0:
-                normalized = (normalized / np.max(normalized) * 255).astype(np.uint8)
-            else:
-                normalized = np.zeros_like(image_data, dtype=np.uint8)
-
-            # Convert to QImage
-            height, width = normalized.shape
-            bytes_per_line = width
-            q_image = QImage(normalized.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
-
-            # Scale while preserving aspect ratio
-            pixmap = QPixmap.fromImage(q_image)
-            return pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-        return QPixmap()
-
-
-    def calculate_center_of_mass(self, image):
-        """Calcula el centro de masa de la imagen."""
-        # Normalizar la imagen para el cálculo
         normalized = image - np.min(image)
         if np.max(normalized) > 0:
             normalized = normalized / np.max(normalized)
+        else:
+            return None
 
         # Crear máscaras para los píxeles significativos
         threshold = 0.1  # Ajusta este valor según sea necesario
@@ -252,25 +268,82 @@ class RoddierTestDialog(QDialog):
         # Calcular centro de masa solo de los píxeles significativos
         total_mass = np.sum(normalized[mask])
         if total_mass > 0:
-            com_y = np.sum(y_indices[mask] * normalized[mask]) / total_mass
-            com_x = np.sum(x_indices[mask] * normalized[mask]) / total_mass
+            com_y = int(np.sum(y_indices[mask] * normalized[mask]) / total_mass)
+            com_x = int(np.sum(x_indices[mask] * normalized[mask]) / total_mass)
         else:
             # Si no hay píxeles significativos, usar el centro geométrico
             com_y, com_x = np.array(image.shape) // 2
 
-        return int(com_y), int(com_x)
+        # Calcular los límites del recorte
+        half_size = self.crop_size // 2
+        y_start = max(0, com_y - half_size)
+        y_end = min(image.shape[0], com_y + half_size)
+        x_start = max(0, com_x - half_size)
+        x_end = min(image.shape[1], com_x + half_size)
+
+        # Asegurarse de que el recorte tenga el tamaño correcto
+        cropped = image[y_start:y_end, x_start:x_end]
+
+        # Si el recorte es más pequeño que crop_size, rellenar con ceros
+        if cropped.shape[0] < self.crop_size or cropped.shape[1] < self.crop_size:
+            padded = np.zeros((self.crop_size, self.crop_size))
+            y_offset = (self.crop_size - cropped.shape[0]) // 2
+            x_offset = (self.crop_size - cropped.shape[1]) // 2
+            padded[y_offset:y_offset+cropped.shape[0],
+                   x_offset:x_offset+cropped.shape[1]] = cropped
+            return padded
+
+        return cropped
+
+    def update_images(self):
+        """Actualiza las imágenes recortadas."""
+        if self.intra_image is not None:
+            self.cropped_intra = self.crop_image(self.intra_image)
+            if self.cropped_intra is not None:
+                self.intra_label.setPixmap(self.create_pixmap(self.cropped_intra))
+
+        if self.extra_image is not None:
+            self.cropped_extra = self.crop_image(self.extra_image)
+            if self.cropped_extra is not None:
+                self.extra_label.setPixmap(self.create_pixmap(self.cropped_extra))
+
+    def create_pixmap(self, image_data):
+        """Converts image data into a QPixmap for display in QLabel."""
+        if image_data is not None and np.any(image_data):
+            # Normalizar la imagen para visualización
+            normalized = image_data - np.min(image_data)
+            if np.max(normalized) > 0:
+                normalized = (normalized / np.max(normalized) * 255).astype(np.uint8)
+            else:
+                normalized = np.zeros_like(image_data, dtype=np.uint8)
+
+            # Asegurarse de que los datos estén contiguos en memoria
+            normalized = np.ascontiguousarray(normalized)
+
+            # Convert to QImage
+            height, width = normalized.shape
+            bytes_per_line = width
+            q_image = QImage(normalized.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+            q_image = q_image.copy()  # Create a deep copy to ensure data ownership
+
+            # Scale while preserving aspect ratio
+            pixmap = QPixmap.fromImage(q_image)
+            return pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        return QPixmap()
 
     def crop_images(self):
         """Guarda los parámetros del telescopio y recorta las imágenes."""
-        # Guardar los parámetros del telescopio
-        self.telescope_params.update({
-            'apertura': self.apertura.value(),
-            'focal': self.focal.value(),
-            'pixel_scale': self.pixel_scale_spin.value(),
-            'binning': self.binning_spin.value(),
-            'max_order': self.numero_de_terminos.value(),
-            'threshold': self.threshold_spin.value()
-        })
+        # Obtener los parámetros del telescopio usando la validación existente
+        telescope_params = self.get_telescope_params()
+        if telescope_params is None:
+            # No recortar imágenes si los parámetros no son válidos
+            self.cropped_intra = None
+            self.cropped_extra = None
+            return
+
+        # Actualizar los parámetros del telescopio
+        self.telescope_params.update(telescope_params)
 
         # Recortar las imágenes
         self.cropped_intra = self.crop_image(self.intra_image)
@@ -284,13 +357,133 @@ class RoddierTestDialog(QDialog):
         return self.cropped_intra, self.cropped_extra
 
     def get_telescope_params(self):
-        """Obtiene los parámetros actuales del telescopio desde los widgets."""
-        self.telescope_params.update({
-            'apertura': self.apertura.value(),
-            'focal': self.focal.value(),
-            'pixel_scale': self.pixel_scale_spin.value(),
-            'binning': self.binning_spin.value(),
-            'max_order': self.numero_de_terminos.value(),
-            'threshold': self.threshold_spin.value()
-        })
-        return self.telescope_params
+        """Retorna los parámetros del telescopio."""
+        try:
+            # Verificar campos vacíos
+            if not self.espejo_primario_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Espejo primario' no puede estar vacío.")
+                return None
+            if not self.espejo_secundario_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Espejo secundario' no puede estar vacío.")
+                return None
+            if not self.focal_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Focal' no puede estar vacío.")
+                return None
+            if not self.apertura_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Apertura' no puede estar vacío.")
+                return None
+            if not self.tamano_pixel_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Tamaño de pixel' no puede estar vacío.")
+                return None
+            if not self.binning_edit.text():
+                QMessageBox.warning(self, "Error", "El campo 'Binning' no puede estar vacío.")
+                return None
+
+            return {
+                'espejo_primario': float(self.espejo_primario_edit.text()),
+                'espejo_secundario': float(self.espejo_secundario_edit.text()),
+                'focal': float(self.focal_edit.text()),
+                'apertura': float(self.apertura_edit.text()),
+                'tamano_pixel': float(self.tamano_pixel_edit.text()),
+                'binning': self.binning_edit.text()
+            }
+        except ValueError:
+            QMessageBox.warning(self, "Error", "Por favor, introduce valores numéricos válidos para los parámetros del telescopio.")
+            return None
+
+    def get_roddier_params(self):
+        """Retorna los parámetros del test de Roddier."""
+        try:
+            # Validar campos vacíos
+            if not self.max_order_edit.text():
+                self.max_order_edit.setText("23")
+            if not self.threshold_edit.text():
+                self.threshold_edit.setText("0.5")
+
+            return {
+                'max_order': int(self.max_order_edit.text()),
+                'threshold': float(self.threshold_edit.text()),
+                'crop_size': self.crop_size
+            }
+        except ValueError:
+            QMessageBox.warning(self, "Error", "Por favor, introduce valores numéricos válidos para los parámetros del test de Roddier.")
+            return None
+
+    def get_interferogram_params(self):
+        """Retorna los parámetros del interferograma."""
+        try:
+            # Validar campos vacíos
+            if not self.fringes_edit.text():
+                self.fringes_edit.setText("4")
+            if not self.reference_freq_edit.text():
+                self.reference_freq_edit.setText("1.0")
+            if not self.reference_intensity_edit.text():
+                self.reference_intensity_edit.setText("0.5")
+
+            return {
+                'fringes': int(self.fringes_edit.text()),
+                'reference_frequency': float(self.reference_freq_edit.text()),
+                'reference_intensity': float(self.reference_intensity_edit.text())
+            }
+        except ValueError:
+            QMessageBox.warning(self, "Error", "Por favor, introduce valores numéricos válidos para los parámetros del interferograma.")
+            return None
+
+    def load_selected_config(self, index):
+        """Carga la configuración seleccionada del ComboBox."""
+        if index == 0:  # "Nueva configuración"
+            # Establecer valores por defecto
+            self.espejo_primario_edit.clear()
+            self.espejo_secundario_edit.clear()
+            self.focal_edit.clear()
+            self.apertura_edit.clear()
+            self.tamano_pixel_edit.clear()
+            self.binning_edit.setText("1x1")
+            return
+
+        config_name = self.config_combo.currentText()
+        if not config_name:  # Si no hay nombre, no hacer nada
+            return
+
+        config_file = os.path.join(self.config_path, f"{config_name}.json")
+
+        try:
+            with open(config_file, 'r') as f:
+                params = json.load(f)
+                self.espejo_primario_edit.setText(str(params.get('espejo_primario', '')))
+                self.espejo_secundario_edit.setText(str(params.get('espejo_secundario', '')))
+                self.focal_edit.setText(str(params.get('focal', '')))
+                self.apertura_edit.setText(str(params.get('apertura', '')))
+                self.tamano_pixel_edit.setText(str(params.get('tamano_pixel', '')))
+                self.binning_edit.setText(str(params.get('binning', '1x1')))
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Error al cargar la configuración: {str(e)}")
+
+    def load_configurations(self):
+        """Carga las configuraciones disponibles en el directorio especificado."""
+        if not os.path.exists(self.config_path):
+            return
+
+        # Guardar el índice actual
+        current_index = self.config_combo.currentIndex()
+        current_text = self.config_combo.currentText()
+
+        # Limpiar y añadir la opción de nueva configuración
+        self.config_combo.clear()
+        self.config_combo.addItem("Nueva configuración")
+
+        # Cargar configuraciones existentes
+        for file in os.listdir(self.config_path):
+            if file.endswith('.json'):
+                config_name = file[:-5]  # Remove .json extension
+                if config_name:  # Solo añadir si el nombre no está vacío
+                    self.config_combo.addItem(config_name)
+
+        # Restaurar la selección anterior si es posible
+        if current_text:
+            index = self.config_combo.findText(current_text)
+            if index >= 0:
+                self.config_combo.setCurrentIndex(index)
+            else:
+                # Si no se encuentra el texto anterior, seleccionar "Nueva configuración"
+                self.config_combo.setCurrentIndex(0)

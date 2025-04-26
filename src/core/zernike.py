@@ -82,22 +82,20 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
 
     return np.array(base)
 
-def fit_zernike(wavefront, mask, R_out, center, max_order=10):
+def fit_zernike(wavefront, mask, R_out, center, max_order=23):
+    """Ajusta los coeficientes de Zernike al frente de onda.
+
+    Args:
+        wavefront: array 2D con el frente de onda
+        mask: array 2D con la máscara
+        R_out: radio exterior de la pupila
+        center: centro de la pupila (y, x)
+        max_order: orden máximo de los polinomios (por defecto 23)
+
+    Returns:
+        tuple: (coeficientes, base)
     """
-    Ajusta una serie de polinomios de Zernike al frente de onda proporcionado.
-
-    Parámetros:
-    - wavefront: array 2D con el frente de onda
-    - mask: máscara binaria de la pupila
-    - R_out: radio exterior de la pupila en píxeles
-    - center: (cx, cy) centro de la pupila
-    - max_order: orden máximo de los polinomios (por defecto 6)
-
-    Retorna:
-    - coeffs: coeficientes de Zernike
-    - base: base de polinomios de Zernike
-    """
-
+    # Calcular la base de Zernike
     base = zernike_polynomials(wavefront.shape, mask, R_out, center, max_order)
 
     masked_wavefront = wavefront[mask]

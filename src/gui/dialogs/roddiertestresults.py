@@ -1,10 +1,13 @@
 import numpy as np
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QCheckBox, QScrollArea,
                              QWidget, QHBoxLayout, QPushButton, QFileDialog)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor, QPalette
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtGui import QColor, QPalette
 import matplotlib.pyplot as plt
+from src.core.interferometry import calculate_interferogram
+from src.core.psf import calculate_psf
 
 ZERN_NAMES = [
     "Piston", "Tilt X", "Tilt Y", "Defocus",
@@ -20,17 +23,49 @@ class RoddierTestResultsWindow(QDialog):
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
+        self.setModal(False)  # Cambiar a no modal para permitir interacción con otras ventanas
+        self.setMinimumSize(1600, 800)  # Aumentado para acomodar los tres gráficos
 
         self.zernike_coeffs = None
         self.zernike_base = None
         self.zernike_checks = []
+        self.annular_mask = None
+        self.interferogram_params = None
+        self.telescope_params = None
 
+        # Layout principal
         layout = QVBoxLayout(self)
 
+        # Layout para los gráficos
+        plots_layout = QHBoxLayout()
+        layout.addLayout(plots_layout)
+
+        # Contenedor para el frente de onda
+        wavefront_group = QWidget()
+        wavefront_layout = QVBoxLayout(wavefront_group)
         self.wavefront_fig = Figure(figsize=(5, 5), dpi=100)
         self.wavefront_ax = self.wavefront_fig.add_subplot(111)
         self.wavefront_canvas = FigureCanvas(self.wavefront_fig)
-        layout.addWidget(self.wavefront_canvas)
+        wavefront_layout.addWidget(self.wavefront_canvas)
+        plots_layout.addWidget(wavefront_group)
+
+        # Contenedor para el interferograma
+        interferogram_group = QWidget()
+        interferogram_layout = QVBoxLayout(interferogram_group)
+        self.interferogram_fig = Figure(figsize=(5, 5), dpi=100)
+        self.interferogram_ax = self.interferogram_fig.add_subplot(111)
+        self.interferogram_canvas = FigureCanvas(self.interferogram_fig)
+        interferogram_layout.addWidget(self.interferogram_canvas)
+        plots_layout.addWidget(interferogram_group)
+
+        # Contenedor para la PSF
+        psf_group = QWidget()
+        psf_layout = QVBoxLayout(psf_group)
+        self.psf_fig = Figure(figsize=(5, 5), dpi=100)
+        self.psf_ax = self.psf_fig.add_subplot(111)
+        self.psf_canvas = FigureCanvas(self.psf_fig)
+        psf_layout.addWidget(self.psf_canvas)
+        plots_layout.addWidget(psf_group)
 
         self.checkbox_area = QScrollArea()
         self.checkbox_widget = QWidget()
@@ -49,10 +84,12 @@ class RoddierTestResultsWindow(QDialog):
         button_layout.addWidget(close_button)
         layout.addLayout(button_layout)
 
-    def update_plots(self, zernike_coeffs, zernike_base, annular_mask=None):
+    def update_plots(self, zernike_coeffs, zernike_base, annular_mask, interferogram_params, telescope_params):
         self.zernike_coeffs = zernike_coeffs
         self.zernike_base = zernike_base
         self.annular_mask = annular_mask
+        self.interferogram_params = interferogram_params
+        self.telescope_params = telescope_params
 
         self._create_checkboxes()
         self._update_wavefront_plot()
@@ -122,10 +159,9 @@ class RoddierTestResultsWindow(QDialog):
         self.wavefront_ax.clear()
         self.wavefront_fig.clf()
         self.wavefront_ax = self.wavefront_fig.add_subplot(111)
-        #vlim = np.max(np.abs(active_contrib))
 
         # Crear un mapa de colores personalizado que tenga blanco para valores enmascarados
-        cmap = plt.cm.nipy_spectral # Añadir _r para invertir la escala de colores
+        cmap = plt.cm.nipy_spectral
         cmap.set_bad('white')  # Establecer el color para valores enmascarados como blanco
 
         # Rotar la imagen 180 grados antes de mostrarla
@@ -142,6 +178,63 @@ class RoddierTestResultsWindow(QDialog):
         self.wavefront_fig.colorbar(im, ax=self.wavefront_ax)
         self.wavefront_ax.set_title("Suma de modos Zernike seleccionados")
         self.wavefront_canvas.draw()
+
+        # Actualizar el interferograma y la PSF
+        self._update_interferogram_plot(active_contrib)
+        self._update_psf_plot(active_contrib)
+
+    def _update_interferogram_plot(self, wavefront):
+        if wavefront is None or self.annular_mask is None or self.interferogram_params is None:
+            return
+
+        # Calcular el interferograma
+        interferogram = calculate_interferogram(
+            wavefront,
+            self.interferogram_params['reference_frequency'],
+            self.interferogram_params['reference_intensity'],
+            self.annular_mask
+        )
+
+        # Limpiar figura y ejes anteriores
+        self.interferogram_ax.clear()
+        self.interferogram_fig.clf()
+        self.interferogram_ax = self.interferogram_fig.add_subplot(111)
+
+        # Visualizar el interferograma
+        im = self.interferogram_ax.imshow(
+            interferogram,
+            cmap='gray',
+            aspect='equal'
+        )
+
+        self.interferogram_ax.set_title("Interferograma")
+        self.interferogram_canvas.draw()
+
+    def _update_psf_plot(self, wavefront):
+        if wavefront is None or self.annular_mask is None or self.telescope_params is None:
+            return
+
+        # Calcular la PSF
+        psf, psf_log = calculate_psf(
+            wavefront * self.annular_mask,  # Aplicar la máscara al frente de onda
+            self.annular_mask  # Usar la máscara anular como pupila
+        )
+
+        # Limpiar figura y ejes anteriores
+        self.psf_ax.clear()
+        self.psf_fig.clf()
+        self.psf_ax = self.psf_fig.add_subplot(111)
+
+        # Visualizar la PSF en escala logarítmica
+        im = self.psf_ax.imshow(
+            psf_log,  # Ya está en escala logarítmica
+            cmap='viridis',
+            aspect='equal'
+        )
+
+        self.psf_ax.set_title("PSF (escala logarítmica)")
+        self.psf_fig.colorbar(im, ax=self.psf_ax)
+        self.psf_canvas.draw()
 
     def export_results(self):
         if self.zernike_coeffs is None:

@@ -3,11 +3,25 @@
 
 import numpy as np
 
-def calcular_psf(W_rec, pupila_mask):
+import numpy as np
+
+def calculate_psf(W_rec, pupila_mask):
+    # Convertir frente de onda en radianes
     fase_W = 2 * np.pi * W_rec
+
+    # Función pupilar compleja
     pupil_function = pupila_mask * np.exp(1j * fase_W)
-    E_focal = np.fft.fftshift(np.fft.fft2(pupil_function))
+
+    # FFT normalizada correctamente para generar la PSF
+    E_focal = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(pupil_function)))
+
+    # Intensidad (PSF)
     PSF = np.abs(E_focal)**2
-    PSF /= PSF.max()
+
+    # Normalización para visualización correcta
+    PSF /= PSF.sum()
+
+    # Versión logarítmica para visualización
     PSF_log = np.log10(PSF + 1e-8)
+
     return PSF, PSF_log
