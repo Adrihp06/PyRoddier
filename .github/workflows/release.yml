@@ -35,7 +35,8 @@ jobs:
             --name "$APP_NAME" \
             --distpath dist/ \
             --add-data "icons:icons" \
-            --windowed
+            --windowed \
+            --icon=icons/pyroddier_logo.png
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
