@@ -8,6 +8,8 @@ from matplotlib.colors import Normalize
 from astropy.io import fits
 import numpy as np
 import os
+import json
+from pathlib import Path
 from src.core.roddier import calculate_wavefront
 from src.core.zernike import fit_zernike
 from src.core.interferometry import calculate_interferogram
@@ -16,6 +18,8 @@ from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
 from src.gui.dialogs.roddiertest import RoddierTestDialog
 from src.gui.dialogs.interferogramconfig import InterferogramConfigDialog
 from src.gui.dialogs.interferogramresults import InterferogramResultsDialog
+from src.gui.dialogs.config_dialog import ConfigDialog
+from src.common.config import get_config_paths
 import sys
 
 def get_resource_path(relative_path):
@@ -34,6 +38,18 @@ class FitsViewer(QMainWindow):
         self.setWindowTitle("Test de Roddier con Zernike")
         self.setGeometry(100, 100, 1200, 800)
 
+        # Get configuration paths
+        config_paths = get_config_paths()
+        self.config_path = config_paths['telescope_dir']
+        self.config_file = Path.home() / '.pyroddier' / 'config.json'
+
+        # Variables de configuración
+        self.image_path = None
+        self.results_path = None
+
+        # Cargar rutas por defecto
+        self.load_default_paths()
+
         # Variable para el tema
         self.is_dark_theme = True
 
@@ -44,8 +60,27 @@ class FitsViewer(QMainWindow):
         # Crear barra de herramientas
         self.toolbar = QToolBar()
         self.toolbar.setMovable(False)
-        self.addToolBar(self.toolbar)  # Añadir la barra de herramientas a la ventana principal
-        self.apply_theme()
+        self.toolbar.setFloatable(False)
+        self.toolbar.setAllowedAreas(Qt.TopToolBarArea)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)  # Asegurar que la barra de herramientas está en la parte superior
+        self.toolbar.setStyleSheet("""
+            QToolBar {
+                background-color: #2b2b2b;
+                border: none;
+                padding: 4px;
+            }
+            QToolButton {
+                background-color: transparent;
+                border: none;
+                padding: 4px;
+            }
+            QToolButton:hover {
+                background-color: #404040;
+            }
+            QToolButton:pressed {
+                background-color: #505050;
+            }
+        """)
 
         # Acción para el Test de Roddier
         self.roddier_action = QAction(QIcon(get_resource_path('icons/roddier.png')), 'Test de Roddier', self)
@@ -85,6 +120,15 @@ class FitsViewer(QMainWindow):
         self.theme_action.setStatusTip('Cambiar entre modo claro y oscuro')
         self.theme_action.triggered.connect(self.toggle_theme)
         self.toolbar.addAction(self.theme_action)
+
+        # Separador
+        self.toolbar.addSeparator()
+
+        # Acción para configuración
+        self.config_action = QAction(QIcon(get_resource_path('icons/settings.png')), 'Configuración', self)
+        self.config_action.setStatusTip('Abrir configuración')
+        self.config_action.triggered.connect(self.run_config_dialog)
+        self.toolbar.addAction(self.config_action)
 
         self.setStyleSheet("""
             QMainWindow {
@@ -299,12 +343,26 @@ class FitsViewer(QMainWindow):
         self.center_scroll_on_point(scroll, com_x, com_y)
 
     def load_intra_image(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar imagen intra-focal", "", "FITS Files (*.fits *.fit)")
-        self.process_and_display_image(file_path, is_intrafocal=True)
+        """Carga una imagen intra-focal."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar imagen intra-focal",
+            self.image_path if self.image_path else "",
+            "FITS Files (*.fits *.fit)"
+        )
+        if file_path:
+            self.process_and_display_image(file_path, is_intrafocal=True)
 
     def load_extra_image(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar imagen extra-focal", "", "FITS Files (*.fits *.fit)")
-        self.process_and_display_image(file_path, is_intrafocal=False)
+        """Carga una imagen extra-focal."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar imagen extra-focal",
+            self.image_path if self.image_path else "",
+            "FITS Files (*.fits *.fit)"
+        )
+        if file_path:
+            self.process_and_display_image(file_path, is_intrafocal=False)
 
     def load_fits_image(self, file_path):
         try:
@@ -345,12 +403,15 @@ class FitsViewer(QMainWindow):
             cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
 
             telescope_params = roddier_dialog.get_telescope_params()
+            roddier_params = roddier_dialog.get_roddier_params()
+            interferogram_params = roddier_dialog.get_interferogram_params()
+
             apertura = telescope_params['apertura']
             focal = telescope_params['focal']
-            pixel_scale = telescope_params['pixel_scale']
-            max_order = telescope_params['max_order']
-            binning = telescope_params['binning']
-            threshold = telescope_params['threshold']
+            pixel_scale = telescope_params['tamano_pixel']
+            max_order = roddier_params['max_order']
+            threshold = roddier_params['threshold']
+
             delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
                 cropped_intra,
                 cropped_extra,
@@ -366,14 +427,16 @@ class FitsViewer(QMainWindow):
                     wavefront, annular_mask, R_out, center, max_order
                 )
 
+            # Mostrar resultados en una única ventana
             results_window = RoddierTestResultsWindow("Resultados del Test de Roddier", self)
             results_window.update_plots(
                 zernike_coeffs=zernike_coeffs,
                 zernike_base=zernike_base,
-                annular_mask=annular_mask
+                annular_mask=annular_mask,
+                interferogram_params=interferogram_params,
+                telescope_params=telescope_params
             )
-
-            results_window.exec_()
+            results_window.show()
 
     def run_interferometry(self):
         if not self.intra_image_path or not self.extra_image_path:
@@ -394,7 +457,7 @@ class FitsViewer(QMainWindow):
             telescope_params = dialog.get_telescope_params()
             apertura = telescope_params['apertura']
             focal = telescope_params['focal']
-            pixel_scale = telescope_params['pixel_scale']
+            pixel_scale = telescope_params['tamano_pixel']
             reference_intensity = config['reference_intensity']
             reference_frequency = config['reference_frequency']
 
@@ -408,9 +471,9 @@ class FitsViewer(QMainWindow):
             )
             # Reconstruir frente de onda (W_rec)
             wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
-            interferogram = calculate_interferogram(reference_intensity,
+            interferogram = calculate_interferogram(wavefront,
                                                         reference_frequency,
-                                                        wavefront,
+                                                        reference_intensity,
                                                         annular_mask)
             # Crear ventana de resultados
             results_window = InterferogramResultsDialog("Interferograma simulado", self)
@@ -441,47 +504,30 @@ class FitsViewer(QMainWindow):
         """Aplica el tema actual a la interfaz."""
         if self.is_dark_theme:
             self.setStyleSheet("""
-                QMainWindow, QWidget {
+                QMainWindow {
                     background-color: #2b2b2b;
                     color: #ffffff;
                 }
-                QMenuBar {
-                    background-color: #363636;
-                    color: white;
-                    border-bottom: 1px solid #404040;
-                }
-                QMenuBar::item {
-                    padding: 4px 10px;
-                    background-color: transparent;
-                }
-                QMenuBar::item:selected {
-                    background-color: #0d47a1;
-                }
-                QMenu {
-                    background-color: #363636;
-                    color: white;
-                    border: 1px solid #404040;
-                }
-                QMenu::item:selected {
-                    background-color: #0d47a1;
+                QWidget {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                 }
                 QToolBar {
-                    background-color: #363636;
+                    background-color: #2b2b2b;
                     border: none;
-                    spacing: 10px;
-                    padding: 5px;
+                    padding: 4px;
                 }
                 QToolButton {
                     background-color: transparent;
                     border: none;
-                    border-radius: 4px;
-                    padding: 5px;
+                    padding: 4px;
                 }
                 QToolButton:hover {
-                    background-color: #0d47a1;
+                    background-color: #404040;
                 }
                 QToolButton:pressed {
-                    background-color: #0a3d91;
+                    background-color: #505050;
                 }
                 QPushButton {
                     background-color: #0d47a1;
@@ -502,37 +548,6 @@ class FitsViewer(QMainWindow):
                     color: #ffffff;
                     font-size: 14px;
                     padding: 4px;
-                }
-                QListWidget {
-                    background-color: #363636;
-                    border: 1px solid #404040;
-                    border-radius: 4px;
-                    padding: 4px;
-                    color: white;
-                }
-                QListWidget::item {
-                    padding: 4px;
-                    border-radius: 2px;
-                }
-                QListWidget::item:selected {
-                    background-color: #0d47a1;
-                }
-                QSlider {
-                    height: 20px;
-                }
-                QSlider::groove:horizontal {
-                    border: 1px solid #404040;
-                    height: 6px;
-                    background: #363636;
-                    margin: 0px;
-                    border-radius: 3px;
-                }
-                QSlider::handle:horizontal {
-                    background: #0d47a1;
-                    border: none;
-                    width: 18px;
-                    margin: -6px 0;
-                    border-radius: 9px;
                 }
                 QFrame {
                     border: 1px solid #404040;
@@ -541,47 +556,30 @@ class FitsViewer(QMainWindow):
             """)
         else:
             self.setStyleSheet("""
-                QMainWindow, QWidget {
+                QMainWindow {
                     background-color: #ffffff;
                     color: #000000;
                 }
-                QMenuBar {
-                    background-color: #f0f0f0;
+                QWidget {
+                    background-color: #ffffff;
                     color: #000000;
-                    border-bottom: 1px solid #d0d0d0;
-                }
-                QMenuBar::item {
-                    padding: 4px 10px;
-                    background-color: transparent;
-                }
-                QMenuBar::item:selected {
-                    background-color: #e0e0e0;
-                }
-                QMenu {
-                    background-color: #f0f0f0;
-                    color: #000000;
-                    border: 1px solid #d0d0d0;
-                }
-                QMenu::item:selected {
-                    background-color: #e0e0e0;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                 }
                 QToolBar {
-                    background-color: #f0f0f0;
+                    background-color: #ffffff;
                     border: none;
-                    spacing: 10px;
-                    padding: 5px;
+                    padding: 4px;
                 }
                 QToolButton {
                     background-color: transparent;
                     border: none;
-                    border-radius: 4px;
-                    padding: 5px;
+                    padding: 4px;
                 }
                 QToolButton:hover {
-                    background-color: #e0e0e0;
+                    background-color: #f0f0f0;
                 }
                 QToolButton:pressed {
-                    background-color: #d0d0d0;
+                    background-color: #e0e0e0;
                 }
                 QPushButton {
                     background-color: #0d47a1;
@@ -603,39 +601,8 @@ class FitsViewer(QMainWindow):
                     font-size: 14px;
                     padding: 4px;
                 }
-                QListWidget {
-                    background-color: #ffffff;
-                    border: 1px solid #d0d0d0;
-                    border-radius: 4px;
-                    padding: 4px;
-                    color: #000000;
-                }
-                QListWidget::item {
-                    padding: 4px;
-                    border-radius: 2px;
-                }
-                QListWidget::item:selected {
-                    background-color: #e0e0e0;
-                }
-                QSlider {
-                    height: 20px;
-                }
-                QSlider::groove:horizontal {
-                    border: 1px solid #d0d0d0;
-                    height: 6px;
-                    background: #f0f0f0;
-                    margin: 0px;
-                    border-radius: 3px;
-                }
-                QSlider::handle:horizontal {
-                    background: #0d47a1;
-                    border: none;
-                    width: 18px;
-                    margin: -6px 0;
-                    border-radius: 9px;
-                }
                 QFrame {
-                    border: 1px solid #d0d0d0;
+                    border: 1px solid #cccccc;
                     border-radius: 4px;
                 }
             """)
@@ -708,3 +675,25 @@ class FitsViewer(QMainWindow):
         if self.extra_image_data is not None:
             com_y, com_x = self.calculate_center_of_mass(self.extra_image_data)
             self.center_scroll_on_point(self.extra_scroll, com_x, com_y)
+
+    def load_default_paths(self):
+        """Carga las rutas por defecto desde el archivo config.json."""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    if 'image_path' in config:
+                        self.image_path = config['image_path']
+                    if 'results_path' in config:
+                        self.results_path = config['results_path']
+        except Exception as e:
+            print(f"Error al cargar las rutas por defecto: {str(e)}")
+
+    def run_config_dialog(self):
+        """Muestra el diálogo de configuración."""
+        dialog = ConfigDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            config = dialog.get_config()
+            self.image_path = config['image_path']
+            self.results_path = config['results_path']
+            # Las rutas ya se guardan automáticamente en config.json desde el diálogo
