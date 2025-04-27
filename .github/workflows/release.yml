@@ -10,8 +10,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    outputs:
-      artifact-names: ${{ steps.set-artifact-name.outputs.artifact-names }}
+    env:
+      PLATFORM: ${{ matrix.os }}
+      TAG_NAME: ${{ github.ref_name }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -27,10 +29,24 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Set pretty platform name
+        id: platform_name
+        run: |
+          if [[ "$PLATFORM" == "windows-latest" ]]; then
+            echo "PLATFORM_NAME=windows" >> $GITHUB_ENV
+            echo "EXT=exe" >> $GITHUB_ENV
+          elif [[ "$PLATFORM" == "ubuntu-latest" ]]; then
+            echo "PLATFORM_NAME=linux" >> $GITHUB_ENV
+            echo "EXT=tar.gz" >> $GITHUB_ENV
+          elif [[ "$PLATFORM" == "macos-latest" ]]; then
+            echo "PLATFORM_NAME=mac" >> $GITHUB_ENV
+            echo "EXT=zip" >> $GITHUB_ENV
+          fi
+
       - name: Build executable
         shell: bash
         run: |
-          export APP_NAME="pyroddier-${{ matrix.os }}-${{ github.ref_name }}"
+          export APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
           pyinstaller src/main.py \
             --noconfirm \
             --clean \
@@ -40,27 +56,52 @@ jobs:
             --windowed \
             --icon=icons/pyroddier_logo.png
 
+          cd dist
+          if [[ "$PLATFORM" == "macos-latest" ]]; then
+            zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
+          elif [[ "$PLATFORM" == "ubuntu-latest" ]]; then
+            tar -czvf "${APP_NAME}.tar.gz" "${APP_NAME}"
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pyroddier-${{ matrix.os }}-${{ github.ref_name }}
-          path: dist/
+          name: "pyroddier-${{ env.PLATFORM_NAME }}-${{ env.TAG_NAME }}"
+          path: "dist/pyroddier-*"
 
   release:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
 
-      - name: Upload to Release
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          WINDOWS_ASSET=$(find artifacts/ -name "*.exe" | head -n 1)
+          MAC_ASSET=$(find artifacts/ -name "*.zip" | head -n 1)
+          LINUX_ASSET=$(find artifacts/ -name "*.tar.gz" | head -n 1)
+
+          echo "Release notes:"
+          echo "### Downloads" > release_notes.md
+          if [ -n "$WINDOWS_ASSET" ]; then
+            echo "- [Windows]($(basename "$WINDOWS_ASSET"))" >> release_notes.md
+          fi
+          if [ -n "$MAC_ASSET" ]; then
+            echo "- [macOS]($(basename "$MAC_ASSET"))" >> release_notes.md
+          fi
+          if [ -n "$LINUX_ASSET" ]; then
+            echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
+          fi
+
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
+          files: artifacts/**/*.*
+          body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
