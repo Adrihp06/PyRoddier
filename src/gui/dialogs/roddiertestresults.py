@@ -61,9 +61,10 @@ class RoddierTestResultsWindow(QDialog):
         # Contenedor para la PSF
         psf_group = QWidget()
         psf_layout = QVBoxLayout(psf_group)
-        self.psf_fig = Figure(figsize=(5, 5), dpi=100)
+        self.psf_fig = Figure(figsize=(5, 5), dpi=100)  # Tamaño original
         self.psf_ax = self.psf_fig.add_subplot(111)
         self.psf_canvas = FigureCanvas(self.psf_fig)
+        self.psf_canvas.mpl_connect('scroll_event', self._on_psf_scroll)  # Conectar evento de scroll
         psf_layout.addWidget(self.psf_canvas)
         plots_layout.addWidget(psf_group)
 
@@ -133,6 +134,7 @@ class RoddierTestResultsWindow(QDialog):
             return
 
         active_contrib = np.zeros_like(self.zernike_base[0])
+
         higher_order_sum = 0
 
         # Limitar a máximo 23 elementos (0-22)
@@ -155,6 +157,7 @@ class RoddierTestResultsWindow(QDialog):
             # Crear un array enmascarado
             active_contrib = np.ma.masked_array(active_contrib, mask=mask)
 
+
         # Limpiar figura y ejes anteriores
         self.wavefront_ax.clear()
         self.wavefront_fig.clf()
@@ -165,11 +168,11 @@ class RoddierTestResultsWindow(QDialog):
         cmap.set_bad('white')  # Establecer el color para valores enmascarados como blanco
 
         # Rotar la imagen 180 grados antes de mostrarla
-        active_contrib = np.flipud(active_contrib)
-
+        wavefront_for_calc = np.ma.getdata(active_contrib)  # sin máscara, sin rotación
+        wavefront_for_display = np.flipud(active_contrib)   # solo para mostrar
         # Visualizar con escalas fijas simétricas
         im = self.wavefront_ax.imshow(
-            active_contrib,
+            wavefront_for_display,
             origin='lower',
             cmap=cmap,
             aspect='equal'
@@ -180,8 +183,8 @@ class RoddierTestResultsWindow(QDialog):
         self.wavefront_canvas.draw()
 
         # Actualizar el interferograma y la PSF
-        self._update_interferogram_plot(active_contrib)
-        self._update_psf_plot(active_contrib)
+        self._update_interferogram_plot(wavefront_for_calc)
+        self._update_psf_plot(wavefront_for_calc)
 
     def _update_interferogram_plot(self, wavefront):
         if wavefront is None or self.annular_mask is None or self.interferogram_params is None:
@@ -216,7 +219,7 @@ class RoddierTestResultsWindow(QDialog):
 
         # Calcular la PSF
         psf, psf_log = calculate_psf(
-            wavefront * self.annular_mask,  # Aplicar la máscara al frente de onda
+            wavefront,  # Aplicar la máscara al frente de onda
             self.annular_mask  # Usar la máscara anular como pupila
         )
 
@@ -234,6 +237,32 @@ class RoddierTestResultsWindow(QDialog):
 
         self.psf_ax.set_title("PSF (escala logarítmica)")
         self.psf_fig.colorbar(im, ax=self.psf_ax)
+        self.psf_canvas.draw()
+
+    def _on_psf_scroll(self, event):
+        """Manejador del evento de scroll para hacer zoom en la PSF."""
+        if event.inaxes != self.psf_ax:
+            return
+
+        # Obtener los límites actuales
+        xlim = self.psf_ax.get_xlim()
+        ylim = self.psf_ax.get_ylim()
+
+        # Calcular el centro del zoom
+        x_center = (xlim[0] + xlim[1]) / 2
+        y_center = (ylim[0] + ylim[1]) / 2
+
+        # Factor de zoom (aumentar o disminuir)
+        zoom_factor = 1.1 if event.button == 'up' else 0.9
+
+        # Aplicar el zoom manteniendo el centro
+        new_width = (xlim[1] - xlim[0]) * zoom_factor
+        new_height = (ylim[1] - ylim[0]) * zoom_factor
+
+        self.psf_ax.set_xlim(x_center - new_width/2, x_center + new_width/2)
+        self.psf_ax.set_ylim(y_center - new_height/2, y_center + new_height/2)
+
+        # Redibujar el canvas
         self.psf_canvas.draw()
 
     def export_results(self):
