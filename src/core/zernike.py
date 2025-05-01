@@ -2,6 +2,7 @@
 # Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 import numpy as np
+from scipy.special import factorial as fact
 
 def zernike_radial(n, m, rho):
     """
@@ -19,9 +20,6 @@ def zernike_radial(n, m, rho):
 
 def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     """
-    Genera una base ortonormal de polinomios de Zernike sobre una máscara anular,
-    siguiendo el orden de Noll (como lo hace WinRoddier).
-
     Parámetros:
     - shape: (alto, ancho) de la imagen
     - mask: máscara binaria de la pupila (anular)
@@ -31,9 +29,6 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     Retorna:
     - base: lista de arrays 2D con los polinomios ortonormalizados
     """
-    import numpy as np
-    from scipy.special import factorial as fact
-
     y, x = np.indices(shape)
     cy, cx = center
     x = x - cx
@@ -46,7 +41,6 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     theta[mask == 0] = 0
 
     def R(n, m, r):
-        """Polinomio radial de Zernike"""
         Rnm = np.zeros_like(r)
         for k in range((n - abs(m)) // 2 + 1):
             num = (-1)**k * fact(n - k)
@@ -62,7 +56,7 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
         else:
             return R(n, -m, r) * np.sin(-m * theta)
 
-    # Generar todos los índices (n, m) hasta el orden máximo
+    # Orden de Noll
     noll_indices = [
         (0, 0), (1, 1), (1, -1), (2, 0), (2, -2), (2, 2),
         (3, -1), (3, 1), (3, -3), (3, 3), (4, 0),
@@ -73,11 +67,14 @@ def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     base = []
     for idx, (n, m) in enumerate(noll_indices[:max_terms]):
         Znm = Z(n, m, r, theta)
-        Znm *= mask
 
-        # Normalización
-        norm_factor = np.sqrt((2 * (n + 1)) if m != 0 else (n + 1))
-        Znm /= np.sqrt(np.sum(Znm**2 * mask))  # ortonormalizar sobre máscara
+        # Normalización analítica (como hace WinRoddier)
+        norm_factor = np.sqrt(2 * (n + 1)) if m != 0 else np.sqrt(n + 1)
+        Znm *= norm_factor
+
+        # Aplicar máscara para limitar el dominio
+        Znm *= mask
+        #Znm /= np.sqrt(np.sum(Znm**2 * mask))
         base.append(Znm)
 
     return np.array(base)
