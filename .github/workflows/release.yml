@@ -87,6 +87,7 @@ jobs:
             dist/*.zip
             dist/*.tar.gz
             dist/*.exe
+            dist/**/*.exe
 
   release:
     needs: build
