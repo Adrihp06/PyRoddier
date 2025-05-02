@@ -81,6 +81,7 @@ jobs:
 
       - name: Find built executables
         id: find_assets
+        shell: bash
         run: |
           WINDOWS_ASSET=$(find artifacts/ -type f -name "*.exe" | head -n 1)
           MAC_ASSET=$(find artifacts/ -type f -name "*.zip" | head -n 1)
@@ -100,7 +101,6 @@ jobs:
           if [[ -f "$LINUX_ASSET" ]]; then
             echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
           fi
-        shell: bash
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v1
