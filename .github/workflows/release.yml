@@ -31,19 +31,24 @@ jobs:
 
       - name: Set pretty platform name
         id: platform_name
+        shell: bash
         run: |
-          if [[ "$PLATFORM" == "windows-latest" ]]; then
-            echo "PLATFORM_NAME=windows" >> $GITHUB_ENV
-            echo "EXT=exe" >> $GITHUB_ENV
-          elif [[ "$PLATFORM" == "ubuntu-latest" ]]; then
-            echo "PLATFORM_NAME=linux" >> $GITHUB_ENV
-            echo "EXT=tar.gz" >> $GITHUB_ENV
-          elif [[ "$PLATFORM" == "macos-latest" ]]; then
-            echo "PLATFORM_NAME=mac" >> $GITHUB_ENV
-            echo "EXT=zip" >> $GITHUB_ENV
-          fi
+          case "$PLATFORM" in
+            windows-latest)
+              echo "PLATFORM_NAME=windows" >> $GITHUB_ENV
+              echo "EXT=exe" >> $GITHUB_ENV
+              ;;
+            ubuntu-latest)
+              echo "PLATFORM_NAME=linux" >> $GITHUB_ENV
+              echo "EXT=tar.gz" >> $GITHUB_ENV
+              ;;
+            macos-latest)
+              echo "PLATFORM_NAME=mac" >> $GITHUB_ENV
+              echo "EXT=zip" >> $GITHUB_ENV
+              ;;
+          esac
 
-      - name: Build executable
+      - name: Build and compress executable
         shell: bash
         run: |
           export APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
@@ -57,17 +62,31 @@ jobs:
             --icon=icons/pyroddier_logo.png
 
           cd dist
-          if [[ "$PLATFORM" == "macos-latest" ]]; then
+
+          # Limpia archivos temporales
+          find . -name '__pycache__' -type d -exec rm -r {} + || true
+          find . -name '*.py[co]' -delete || true
+
+          # Comprime según plataforma
+          if [[ "$PLATFORM" == "windows-latest" ]]; then
+            # No comprimir, solo subir .exe
+            echo "No compression needed for Windows."
+          elif [[ "$PLATFORM" == "macos-latest" ]]; then
             zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
+            rm -rf "${APP_NAME}.app"
           elif [[ "$PLATFORM" == "ubuntu-latest" ]]; then
             tar -czvf "${APP_NAME}.tar.gz" "${APP_NAME}"
+            rm -rf "${APP_NAME}"
           fi
 
-      - name: Upload artifact
+      - name: Upload compressed artifact
         uses: actions/upload-artifact@v4
         with:
           name: "pyroddier-${{ env.PLATFORM_NAME }}-${{ env.TAG_NAME }}"
-          path: "dist/pyroddier-*"
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.exe
 
   release:
     needs: build
