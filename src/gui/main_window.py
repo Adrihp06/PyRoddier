@@ -371,8 +371,6 @@ class FitsViewer(QMainWindow):
         roddier_dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
         if roddier_dialog.exec_() == QDialog.Accepted:
             cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
-            np.save("cropped_intra.npy", cropped_intra)
-            np.save("cropped_extra.npy", cropped_extra)
             telescope_params = roddier_dialog.get_telescope_params()
             roddier_params = roddier_dialog.get_roddier_params()
             interferogram_params = roddier_dialog.get_interferogram_params()
