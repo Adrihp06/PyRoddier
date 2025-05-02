@@ -100,6 +100,7 @@ jobs:
           if [[ -f "$LINUX_ASSET" ]]; then
             echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
           fi
+        shell: bash
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v1
