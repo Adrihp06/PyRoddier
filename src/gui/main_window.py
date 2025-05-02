@@ -5,19 +5,16 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon
 from matplotlib.colors import Normalize
-from astropy.io import fits
 import numpy as np
 import os
 import json
 from pathlib import Path
 from src.core.roddier import calculate_wavefront
 from src.core.zernike import fit_zernike
-from src.core.interferometry import calculate_interferogram
-from src.utils.image_preprocessing import preprocess_winroddier
+from src.common.utils import load_fits_image, calculate_center_of_mass, find_center
+from src.core.optical_preprocessing import preprocess_roddier
 from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
 from src.gui.dialogs.roddiertest import RoddierTestDialog
-from src.gui.dialogs.interferogramconfig import InterferogramConfigDialog
-from src.gui.dialogs.interferogramresults import InterferogramResultsDialog
 from src.gui.dialogs.config_dialog import ConfigDialog
 from src.common.config import get_config_paths
 import sys
@@ -49,9 +46,6 @@ class FitsViewer(QMainWindow):
 
         # Cargar rutas por defecto
         self.load_default_paths()
-
-        # Variable para el tema
-        self.is_dark_theme = True
 
         # Crear barra de menú
         self.menubar = self.menuBar()
@@ -88,12 +82,6 @@ class FitsViewer(QMainWindow):
         self.roddier_action.triggered.connect(self.run_roddier_test)
         self.toolbar.addAction(self.roddier_action)
 
-        # Acción para Interferometría
-        self.interferometry_action = QAction(QIcon(get_resource_path('icons/interferometry.png')), 'Interferometría', self)
-        self.interferometry_action.setStatusTip('Análisis de Interferometría')
-        self.interferometry_action.triggered.connect(self.run_interferometry)
-        self.toolbar.addAction(self.interferometry_action)
-
         # Separador
         self.toolbar.addSeparator()
 
@@ -111,15 +99,6 @@ class FitsViewer(QMainWindow):
         self.center_action.setStatusTip('Centrar ambas imágenes')
         self.center_action.triggered.connect(self.center_both_images)
         self.toolbar.addAction(self.center_action)
-
-        # Separador
-        self.toolbar.addSeparator()
-
-        # Acción para cambiar el tema
-        self.theme_action = QAction(QIcon(get_resource_path('icons/theme.png')), 'Cambiar Tema', self)
-        self.theme_action.setStatusTip('Cambiar entre modo claro y oscuro')
-        self.theme_action.triggered.connect(self.toggle_theme)
-        self.toolbar.addAction(self.theme_action)
 
         # Separador
         self.toolbar.addSeparator()
@@ -315,7 +294,7 @@ class FitsViewer(QMainWindow):
             return
 
         # Cargar y almacenar la imagen
-        image_data = self.load_fits_image(file_path)
+        image_data = load_fits_image(file_path)
         if image_data is None:
             return
 
@@ -323,7 +302,7 @@ class FitsViewer(QMainWindow):
         if not is_intrafocal:
             image_data = np.rot90(image_data, k=2)
         # Calcular el centro de masa
-        com_y, com_x = self.calculate_center_of_mass(image_data)
+        com_y, com_x = calculate_center_of_mass(image_data)
 
         # Almacenar datos según el tipo de imagen
         if is_intrafocal:
@@ -363,15 +342,6 @@ class FitsViewer(QMainWindow):
         )
         if file_path:
             self.process_and_display_image(file_path, is_intrafocal=False)
-
-    def load_fits_image(self, file_path):
-        try:
-            with fits.open(file_path) as hdul:
-                img_data = hdul[0].data
-                return img_data
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al cargar la imagen FITS: {e}")
-            return None
 
     def display_image(self, image_data, label):
         if image_data is not None:
@@ -413,7 +383,7 @@ class FitsViewer(QMainWindow):
             max_order = roddier_params['max_order']
             threshold = roddier_params['threshold']
 
-            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
+            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_roddier(
                 cropped_intra,
                 cropped_extra,
                 apertura=apertura,
@@ -439,51 +409,6 @@ class FitsViewer(QMainWindow):
             )
             results_window.show()
 
-    def run_interferometry(self):
-        if not self.intra_image_path or not self.extra_image_path:
-            QMessageBox.warning(self, "Error", "Por favor, carga las imágenes intra y extra-focal primero.")
-            return
-
-        config_dialog = InterferogramConfigDialog(self)
-        if config_dialog.exec_() != QDialog.Accepted:
-            return
-
-        config = config_dialog.get_config()
-
-        # Luego, obtener las imágenes recortadas
-        dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
-        if dialog.exec_() == QDialog.Accepted:
-            cropped_intra, cropped_extra = dialog.get_cropped_images()
-
-            telescope_params = dialog.get_telescope_params()
-            apertura = telescope_params['apertura']
-            focal = telescope_params['focal']
-            pixel_scale = telescope_params['tamano_pixel']
-            reference_intensity = config['reference_intensity']
-            reference_frequency = config['reference_frequency']
-
-            # Preprocesamiento para obtener delta_I_norm y máscara anular
-            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_winroddier(
-                cropped_intra,
-                cropped_extra,
-                apertura=apertura,
-                focal=focal,
-                pixel_scale=pixel_scale
-            )
-            # Reconstruir frente de onda (W_rec)
-            wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
-            interferogram = calculate_interferogram(wavefront,
-                                                        reference_frequency,
-                                                        reference_intensity,
-                                                        annular_mask)
-            # Crear ventana de resultados
-            results_window = InterferogramResultsDialog("Interferograma simulado", self)
-            results_window.update_plot(interferogram)
-            results_window.exec_()
-        else:
-            QMessageBox.information(self, "Cancelado", "El análisis fue cancelado.")
-
-
     def reset_state(self):
         """Resetea el estado de la aplicación a su estado inicial."""
         # Limpiar datos de imágenes
@@ -502,141 +427,59 @@ class FitsViewer(QMainWindow):
         self.zoom_factor = 1.0
 
     def apply_theme(self):
-        """Aplica el tema actual a la interfaz."""
-        if self.is_dark_theme:
-            self.setStyleSheet("""
-                QMainWindow {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                }
-                QWidget {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                }
-                QToolBar {
-                    background-color: #2b2b2b;
-                    border: none;
-                    padding: 4px;
-                }
-                QToolButton {
-                    background-color: transparent;
-                    border: none;
-                    padding: 4px;
-                }
-                QToolButton:hover {
-                    background-color: #404040;
-                }
-                QToolButton:pressed {
-                    background-color: #505050;
-                }
-                QPushButton {
-                    background-color: #0d47a1;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    font-size: 14px;
-                    min-width: 100px;
-                }
-                QPushButton:hover {
-                    background-color: #1565c0;
-                }
-                QPushButton:pressed {
-                    background-color: #0a3d91;
-                }
-                QLabel {
-                    color: #ffffff;
-                    font-size: 14px;
-                    padding: 4px;
-                }
-                QFrame {
-                    border: 1px solid #404040;
-                    border-radius: 4px;
-                }
-            """)
-        else:
-            self.setStyleSheet("""
-                QMainWindow {
-                    background-color: #ffffff;
-                    color: #000000;
-                }
-                QWidget {
-                    background-color: #ffffff;
-                    color: #000000;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                }
-                QToolBar {
-                    background-color: #ffffff;
-                    border: none;
-                    padding: 4px;
-                }
-                QToolButton {
-                    background-color: transparent;
-                    border: none;
-                    padding: 4px;
-                }
-                QToolButton:hover {
-                    background-color: #f0f0f0;
-                }
-                QToolButton:pressed {
-                    background-color: #e0e0e0;
-                }
-                QPushButton {
-                    background-color: #0d47a1;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    font-size: 14px;
-                    min-width: 100px;
-                }
-                QPushButton:hover {
-                    background-color: #1565c0;
-                }
-                QPushButton:pressed {
-                    background-color: #0a3d91;
-                }
-                QLabel {
-                    color: #000000;
-                    font-size: 14px;
-                    padding: 4px;
-                }
-                QFrame {
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
-                }
-            """)
+        """Aplica el tema oscuro a la interfaz."""
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QToolBar {
+                background-color: #2b2b2b;
+                border: none;
+                padding: 4px;
+            }
+            QToolButton {
+                background-color: transparent;
+                border: none;
+                padding: 4px;
+            }
+            QToolButton:hover {
+                background-color: #404040;
+            }
+            QToolButton:pressed {
+                background-color: #505050;
+            }
+            QPushButton {
+                background-color: #0d47a1;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 14px;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:pressed {
+                background-color: #0a3d91;
+            }
+            QLabel {
+                color: #ffffff;
+                font-size: 14px;
+                padding: 4px;
+            }
+            QFrame {
+                border: 1px solid #404040;
+                border-radius: 4px;
+            }
+        """)
 
-    def toggle_theme(self):
-        """Cambia entre el tema claro y oscuro."""
-        self.is_dark_theme = not self.is_dark_theme
-        self.apply_theme()
-
-    def calculate_center_of_mass(self, image):
-        """Calcula el centro de masa de la imagen."""
-        # Normalizar la imagen para el cálculo
-        normalized = image - np.min(image)
-        if np.max(normalized) > 0:
-            normalized = normalized / np.max(normalized)
-
-        # Crear máscaras para los píxeles significativos
-        threshold = 0.1  # Ajusta este valor según sea necesario
-        mask = normalized > threshold
-
-        # Calcular índices de las coordenadas
-        y_indices, x_indices = np.indices(image.shape)
-
-        # Calcular centro de masa solo de los píxeles significativos
-        total_mass = np.sum(normalized[mask])
-        if total_mass > 0:
-            com_y = np.sum(y_indices[mask] * normalized[mask]) / total_mass
-            com_x = np.sum(x_indices[mask] * normalized[mask]) / total_mass
-        else:
-            # Si no hay píxeles significativos, usar el centro geométrico
-            com_y, com_x = np.array(image.shape) // 2
-
-        return int(com_y), int(com_x)
 
     def center_scroll_on_point(self, scroll_area, center_x, center_y):
         """Centra el scroll en un punto específico de la imagen."""
@@ -670,11 +513,11 @@ class FitsViewer(QMainWindow):
     def center_both_images(self):
         """Centra ambas imágenes usando el centro de masa."""
         if self.intra_image_data is not None:
-            com_y, com_x = self.calculate_center_of_mass(self.intra_image_data)
+            com_y, com_x = calculate_center_of_mass(self.intra_image_data)
             self.center_scroll_on_point(self.intra_scroll, com_x, com_y)
 
         if self.extra_image_data is not None:
-            com_y, com_x = self.calculate_center_of_mass(self.extra_image_data)
+            com_y, com_x = calculate_center_of_mass(self.extra_image_data)
             self.center_scroll_on_point(self.extra_scroll, com_x, com_y)
 
     def load_default_paths(self):
@@ -697,4 +540,3 @@ class FitsViewer(QMainWindow):
             config = dialog.get_config()
             self.image_path = config['image_path']
             self.results_path = config['results_path']
-            # Las rutas ya se guardan automáticamente en config.json desde el diálogo
