@@ -58,8 +58,7 @@ PyRoddier/
 ├── src/                # Main source code
 │   ├── core/          # Core functionalities
 │   ├── gui/           # Graphical interface
-│   ├── utils/         # Utilities
-│   └── config/        # Configurations
+│   ├── commom/        # Utilities
 ├── tests/             # Unit tests
 ├── images/            # Example images
 └── docs/              # Documentation
