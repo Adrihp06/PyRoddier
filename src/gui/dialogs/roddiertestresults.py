@@ -23,8 +23,8 @@ class RoddierTestResultsWindow(QDialog):
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setModal(False)  # Cambiar a no modal para permitir interacción con otras ventanas
-        self.setMinimumSize(1600, 800)  # Aumentado para acomodar los tres gráficos
+        self.setModal(False)
+        self.setMinimumSize(1600, 800)
 
         self.zernike_coeffs = None
         self.zernike_base = None
@@ -61,19 +61,50 @@ class RoddierTestResultsWindow(QDialog):
         # Contenedor para la PSF
         psf_group = QWidget()
         psf_layout = QVBoxLayout(psf_group)
-        self.psf_fig = Figure(figsize=(5, 5), dpi=100)  # Tamaño original
+        self.psf_fig = Figure(figsize=(5, 5), dpi=100)
         self.psf_ax = self.psf_fig.add_subplot(111)
         self.psf_canvas = FigureCanvas(self.psf_fig)
-        self.psf_canvas.mpl_connect('scroll_event', self._on_psf_scroll)  # Conectar evento de scroll
+        self.psf_canvas.mpl_connect('scroll_event', self._on_psf_scroll)
         psf_layout.addWidget(self.psf_canvas)
         plots_layout.addWidget(psf_group)
 
+        # Layout para la parte inferior (Zernike modes y histograma)
+        bottom_layout = QHBoxLayout()
+        layout.addLayout(bottom_layout)
+
+        # Contenedor para los modos de Zernike (izquierda)
+        zernike_container = QWidget()
+        zernike_layout = QVBoxLayout(zernike_container)
+        bottom_layout.addWidget(zernike_container, stretch=1)
+
+        # Botones para marcar/desmarcar todos los modos
+        select_buttons_layout = QHBoxLayout()
+        select_all_button = QPushButton("Marcar todos")
+        select_all_button.clicked.connect(self._select_all_modes)
+        deselect_all_button = QPushButton("Desmarcar todos")
+        deselect_all_button.clicked.connect(self._deselect_all_modes)
+        select_buttons_layout.addWidget(select_all_button)
+        select_buttons_layout.addWidget(deselect_all_button)
+        zernike_layout.addLayout(select_buttons_layout)
+
+        # Área de scroll para los checkboxes
         self.checkbox_area = QScrollArea()
         self.checkbox_widget = QWidget()
         self.checkbox_layout = QVBoxLayout(self.checkbox_widget)
         self.checkbox_area.setWidgetResizable(True)
         self.checkbox_area.setWidget(self.checkbox_widget)
-        layout.addWidget(self.checkbox_area)
+        zernike_layout.addWidget(self.checkbox_area)
+
+        # Contenedor para el histograma (derecha)
+        histogram_container = QWidget()
+        histogram_layout = QVBoxLayout(histogram_container)
+        bottom_layout.addWidget(histogram_container, stretch=1)
+
+        # Figura para el histograma
+        self.histogram_fig = Figure(figsize=(5, 5), dpi=100)
+        self.histogram_ax = self.histogram_fig.add_subplot(111)
+        self.histogram_canvas = FigureCanvas(self.histogram_fig)
+        histogram_layout.addWidget(self.histogram_canvas)
 
         # Botones inferiores
         button_layout = QHBoxLayout()
@@ -94,6 +125,7 @@ class RoddierTestResultsWindow(QDialog):
 
         self._create_checkboxes()
         self._update_wavefront_plot()
+        self._update_histogram()
 
     def _create_checkboxes(self):
         for cb in self.zernike_checks:
@@ -275,3 +307,59 @@ class RoddierTestResultsWindow(QDialog):
             for i, coeff in enumerate(self.zernike_coeffs):
                 name = ZERN_NAMES[i] if i < len(ZERN_NAMES) else f"Z{i+1}"
                 f.write(f"Z{i+1} - {name}: {coeff:.6f}\n")
+
+    def _select_all_modes(self):
+        """Marca todos los modos de Zernike de manera eficiente."""
+        # Actualizar el estado de los checkboxes sin emitir señales
+        for cb in self.zernike_checks:
+            cb.blockSignals(True)
+            cb.setChecked(True)
+            cb.blockSignals(False)
+        # Actualizar el plot una sola vez
+        self._update_wavefront_plot()
+
+    def _deselect_all_modes(self):
+        """Desmarca todos los modos de Zernike de manera eficiente."""
+        # Actualizar el estado de los checkboxes sin emitir señales
+        for cb in self.zernike_checks:
+            cb.blockSignals(True)
+            cb.setChecked(False)
+            cb.blockSignals(False)
+        # Actualizar el plot una sola vez
+        self._update_wavefront_plot()
+
+    def _update_histogram(self):
+        if self.zernike_coeffs is None:
+            return
+
+        # Limitar a máximo 23 elementos (0-22)
+        max_terms = min(len(self.zernike_coeffs), 23)
+        coeffs = self.zernike_coeffs[:max_terms]
+        names = [ZERN_NAMES[i] if i < len(ZERN_NAMES) else f"Z{i+1}" for i in range(max_terms)]
+
+        # Limpiar el histograma anterior
+        self.histogram_ax.clear()
+
+        # Crear el histograma
+        bars = self.histogram_ax.bar(range(max_terms), coeffs, color='skyblue')
+
+        # Colorear las barras según la magnitud
+        for bar in bars:
+            magnitude = abs(bar.get_height())
+            if magnitude > 0.1:
+                bar.set_color('#FF6666')
+            elif magnitude > 0.05:
+                bar.set_color('#FF9966')
+            elif magnitude > 0.01:
+                bar.set_color('#FFCC66')
+
+        # Configurar el histograma
+        self.histogram_ax.set_xticks(range(max_terms))
+        self.histogram_ax.set_xticklabels(names, rotation=45, ha='right', fontsize=8)
+        self.histogram_ax.set_ylabel("Coeficiente")
+        self.histogram_ax.set_title("Coeficientes de Zernike")
+        self.histogram_ax.grid(True, linestyle='--', alpha=0.7)
+
+        # Ajustar el layout para acomodar las etiquetas largas
+        self.histogram_fig.subplots_adjust(bottom=0.3)  # Aumentar espacio para las etiquetas
+        self.histogram_canvas.draw()
