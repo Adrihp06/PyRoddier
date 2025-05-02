@@ -1,12 +1,11 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-                          QFrame, QSpinBox, QDoubleSpinBox, QFormLayout, QGroupBox, QCheckBox,
-                          QFileDialog, QLineEdit, QMessageBox, QComboBox, QInputDialog)
+                          QFrame, QFormLayout, QGroupBox, QLineEdit, QMessageBox, QComboBox, )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
 import numpy as np
 import os
-from src.core.telescope import TelescopeParams
 from src.common.config import get_config_paths
+from src.common.utils import calculate_center_of_mass
 import json
 
 class RoddierTestDialog(QDialog):
@@ -252,28 +251,7 @@ class RoddierTestDialog(QDialog):
             return None
 
         # Calcular el centro de masa
-        normalized = image - np.min(image)
-        if np.max(normalized) > 0:
-            normalized = normalized / np.max(normalized)
-        else:
-            return None
-
-        # Crear máscaras para los píxeles significativos
-        threshold = 0.1  # Ajusta este valor según sea necesario
-        mask = normalized > threshold
-
-        # Calcular índices de las coordenadas
-        y_indices, x_indices = np.indices(image.shape)
-
-        # Calcular centro de masa solo de los píxeles significativos
-        total_mass = np.sum(normalized[mask])
-        if total_mass > 0:
-            com_y = int(np.sum(y_indices[mask] * normalized[mask]) / total_mass)
-            com_x = int(np.sum(x_indices[mask] * normalized[mask]) / total_mass)
-        else:
-            # Si no hay píxeles significativos, usar el centro geométrico
-            com_y, com_x = np.array(image.shape) // 2
-
+        com_y, com_x = calculate_center_of_mass(image)
         # Calcular los límites del recorte
         half_size = self.crop_size // 2
         y_start = max(0, com_y - half_size)
