@@ -68,40 +68,45 @@ jobs:
         with:
           name: "pyroddier-${{ env.PLATFORM_NAME }}-${{ env.TAG_NAME }}"
           path: "dist/pyroddier-*"
+release:
+  needs: build
+  runs-on: ubuntu-latest
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
+  steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
 
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
+    - name: Find built executables
+      id: find_assets
+      run: |
+        WINDOWS_ASSET=$(find artifacts/ -type f -name "*.exe" | head -n 1)
+        MAC_ASSET=$(find artifacts/ -type f -name "*.zip" | head -n 1)
+        LINUX_ASSET=$(find artifacts/ -type f -name "*.tar.gz" | head -n 1)
 
-      - name: Generate release notes
-        id: generate_notes
-        run: |
-          WINDOWS_ASSET=$(find artifacts/ -name "*.exe" | head -n 1)
-          MAC_ASSET=$(find artifacts/ -name "*.zip" | head -n 1)
-          LINUX_ASSET=$(find artifacts/ -name "*.tar.gz" | head -n 1)
+        echo "windows_asset=$WINDOWS_ASSET" >> $GITHUB_OUTPUT
+        echo "mac_asset=$MAC_ASSET" >> $GITHUB_OUTPUT
+        echo "linux_asset=$LINUX_ASSET" >> $GITHUB_OUTPUT
 
-          echo "Release notes:"
-          echo "### Downloads" > release_notes.md
-          if [ -n "$WINDOWS_ASSET" ]; then
-            echo "- [Windows]($(basename "$WINDOWS_ASSET"))" >> release_notes.md
-          fi
-          if [ -n "$MAC_ASSET" ]; then
-            echo "- [macOS]($(basename "$MAC_ASSET"))" >> release_notes.md
-          fi
-          if [ -n "$LINUX_ASSET" ]; then
-            echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
-          fi
+        echo "### Downloads" > release_notes.md
+        if [[ -f "$WINDOWS_ASSET" ]]; then
+          echo "- [Windows]($(basename "$WINDOWS_ASSET"))" >> release_notes.md
+        fi
+        if [[ -f "$MAC_ASSET" ]]; then
+          echo "- [macOS]($(basename "$MAC_ASSET"))" >> release_notes.md
+        fi
+        if [[ -f "$LINUX_ASSET" ]]; then
+          echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
+        fi
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/**/*.*
-          body_path: release_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ steps.find_assets.outputs.windows_asset }}
+          ${{ steps.find_assets.outputs.mac_asset }}
+          ${{ steps.find_assets.outputs.linux_asset }}
+        body_path: release_notes.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
