@@ -11,7 +11,6 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      PLATFORM: ${{ matrix.os }}
       TAG_NAME: ${{ github.ref_name }}
 
     steps:
@@ -29,29 +28,33 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Set pretty platform name
-        id: platform_name
-        shell: bash
+      - name: Set platform name and extension
         run: |
-          case "$PLATFORM" in
-            windows-latest)
-              echo "PLATFORM_NAME=windows" >> $GITHUB_ENV
-              echo "EXT=exe" >> $GITHUB_ENV
-              ;;
-            ubuntu-latest)
-              echo "PLATFORM_NAME=linux" >> $GITHUB_ENV
-              echo "EXT=tar.gz" >> $GITHUB_ENV
-              ;;
-            macos-latest)
-              echo "PLATFORM_NAME=mac" >> $GITHUB_ENV
-              echo "EXT=zip" >> $GITHUB_ENV
-              ;;
-          esac
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "PLATFORM_NAME=windows" >> $GITHUB_ENV
+            echo "EXT=zip" >> $GITHUB_ENV
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "PLATFORM_NAME=linux" >> $GITHUB_ENV
+            echo "EXT=tar.gz" >> $GITHUB_ENV
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            echo "PLATFORM_NAME=mac" >> $GITHUB_ENV
+            echo "EXT=zip" >> $GITHUB_ENV
+          fi
+        shell: bash
 
-      - name: Build and compress executable
+      - name: Build and compress executable (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          $env:APP_NAME = "pyroddier-windows-${{ env.TAG_NAME }}"
+          pyinstaller src\main.py --noconfirm --clean --name $env:APP_NAME --distpath dist --add-data "icons;icons" --windowed --icon=icons\pyroddier_logo.png
+          Compress-Archive -Path "dist\$env:APP_NAME\*" -DestinationPath "dist\$env:APP_NAME.zip"
+
+      - name: Build and compress executable (macOS/Linux)
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
-          export APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
+          APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
           pyinstaller src/main.py \
             --noconfirm \
             --clean \
@@ -67,14 +70,10 @@ jobs:
           find . -name '__pycache__' -type d -exec rm -r {} + || true
           find . -name '*.py[co]' -delete || true
 
-          # Comprime según plataforma
-          if [[ "$PLATFORM" == "windows-latest" ]]; then
-            # No comprimir, solo subir .exe
-            echo "No compression needed for Windows."
-          elif [[ "$PLATFORM" == "macos-latest" ]]; then
+          if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
             zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
             rm -rf "${APP_NAME}.app"
-          elif [[ "$PLATFORM" == "ubuntu-latest" ]]; then
+          elif [[ "${{ env.PLATFORM_NAME }}" == "linux" ]]; then
             tar -czvf "${APP_NAME}.tar.gz" "${APP_NAME}"
             rm -rf "${APP_NAME}"
           fi
@@ -86,8 +85,6 @@ jobs:
           path: |
             dist/*.zip
             dist/*.tar.gz
-            dist/*.exe
-            dist/**/*.exe
 
   release:
     needs: build
@@ -103,9 +100,9 @@ jobs:
         id: find_assets
         shell: bash
         run: |
-          WINDOWS_ASSET=$(find artifacts/ -type f -name "*.exe" | head -n 1)
-          MAC_ASSET=$(find artifacts/ -type f -name "*.zip" | head -n 1)
-          LINUX_ASSET=$(find artifacts/ -type f -name "*.tar.gz" | head -n 1)
+          WINDOWS_ASSET=$(find artifacts/ -type f -name "*windows*.zip" | head -n 1)
+          MAC_ASSET=$(find artifacts/ -type f -name "*mac*.zip" | head -n 1)
+          LINUX_ASSET=$(find artifacts/ -type f -name "*linux*.tar.gz" | head -n 1)
 
           echo "windows_asset=$WINDOWS_ASSET" >> $GITHUB_OUTPUT
           echo "mac_asset=$MAC_ASSET" >> $GITHUB_OUTPUT
