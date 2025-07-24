@@ -92,12 +92,18 @@ jobs:
 
           # Verify build output exists
           if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
+            echo "=== Debug: Looking for macOS build artifacts ==="
+            ls -la
+            echo "=== Expected APP_NAME: ${APP_NAME} ==="
+            
             # PyInstaller always creates pyroddier.app regardless of spec changes
             if [[ -d "pyroddier.app" ]]; then
+              echo "Found pyroddier.app, renaming to ${APP_NAME}.app"
               mv "pyroddier.app" "${APP_NAME}.app"
               zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
               rm -rf "${APP_NAME}.app"
             elif [[ -d "${APP_NAME}.app" ]]; then
+              echo "Found ${APP_NAME}.app directly"
               zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
               rm -rf "${APP_NAME}.app"
             else
