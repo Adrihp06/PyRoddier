@@ -1,6 +1,6 @@
 import numpy as np
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QCheckBox, QScrollArea,
-                             QWidget, QHBoxLayout, QPushButton, QFileDialog)
+                             QWidget, QHBoxLayout, QPushButton, QFileDialog, QInputDialog, QMessageBox, QLabel)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -8,16 +8,36 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from src.core.interferometry import calculate_interferogram
 from src.core.psf import calculate_psf
+from src.core.zernike import calculate_rms
+import os
+import json
 
 ZERN_NAMES = [
-    "Piston", "Tilt X", "Tilt Y", "Defocus",
-    "Astigmatismo 45°", "Astigmatismo 0°", "Coma Y", "Coma X",
-    "Trefoil Y", "Trefoil X", "Esférica primaria",
-    "Astigmatismo secundario 45°", "Astigmatismo secundario 0°",
-    "Tetrafoil Y", "Tetrafoil X", "Coma secundaria Y", "Coma secundaria X",
-    "Trefoil secundario Y", "Trefoil secundario X", "Esférica secundaria",
-    "Pentafoil Y", "Pentafoil X", "Orden superior"
+    "Piston",                      # j=1   (0, 0)
+    "Tilt X",                     # j=2   (1, -1)
+    "Tilt Y",                     # j=3   (1, 1)
+    "Astigmatism 45°",            # j=4   (2, -2)
+    "Defocus",                    # j=5   (2, 0)
+    "Astigmatism 0°",             # j=6   (2, 2)
+    "Trefoil X",                  # j=7   (3, -3)
+    "Coma X",                     # j=8   (3, -1)
+    "Coma Y",                     # j=9   (3, 1)
+    "Trefoil Y",                  # j=10  (3, 3)
+    "Tetrafoil X",                # j=11  (4, -4)
+    "Secondary Astigmatism 45°",  # j=12  (4, -2)
+    "Secondary Spherical",        # j=13  (4, 0)
+    "Secondary Astigmatism 0°",   # j=14  (4, 2)
+    "Tetrafoil Y",                # j=15  (4, 4)
+    "Pentafoil X",                # j=16  (5, -5)
+    "Secondary Trefoil X",        # j=17  (5, -3)
+    "Secondary Coma X",           # j=18  (5, -1)
+    "Secondary Coma Y",           # j=19  (5, 1)
+    "Secondary Trefoil Y",        # j=20  (5, 3)
+    "Pentafoil Y",                # j=21  (5, 5)
+    "Hexafoil X",
+    "Orden superior"
 ]
+
 
 class RoddierTestResultsWindow(QDialog):
     def __init__(self, title, parent=None):
@@ -32,6 +52,7 @@ class RoddierTestResultsWindow(QDialog):
         self.annular_mask = None
         self.interferogram_params = None
         self.telescope_params = None
+        self.img_avg = None
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -94,6 +115,11 @@ class RoddierTestResultsWindow(QDialog):
         self.checkbox_area.setWidgetResizable(True)
         self.checkbox_area.setWidget(self.checkbox_widget)
         zernike_layout.addWidget(self.checkbox_area)
+        
+        # Etiqueta para mostrar el RMS
+        self.rms_label = QLabel()
+        self.rms_label.setStyleSheet("font-weight: bold; font-size: 12pt; margin: 10px;")
+        zernike_layout.addWidget(self.rms_label)
 
         # Contenedor para el histograma (derecha)
         histogram_container = QWidget()
@@ -124,6 +150,7 @@ class RoddierTestResultsWindow(QDialog):
         self.telescope_params = telescope_params
 
         self._create_checkboxes()
+        self._update_rms_display()
         self._update_wavefront_plot()
         self._update_histogram()
 
@@ -160,6 +187,14 @@ class RoddierTestResultsWindow(QDialog):
 
             self.checkbox_layout.addWidget(cb)
             self.zernike_checks.append(cb)
+
+    def _update_rms_display(self):
+        """Actualiza la etiqueta del RMS"""
+        if self.zernike_coeffs is None:
+            return
+        
+        rms_value = calculate_rms(self.zernike_coeffs, exclude_piston=True)
+        self.rms_label.setText(f"RMS (sin pistón): {rms_value:.4f}")
 
     def _update_wavefront_plot(self):
         if self.zernike_base is None or self.zernike_coeffs is None:
@@ -298,15 +333,56 @@ class RoddierTestResultsWindow(QDialog):
         self.psf_canvas.draw()
 
     def export_results(self):
-        if self.zernike_coeffs is None:
+        """Exporta los resultados a una carpeta con el nombre especificado."""
+        # Pedir nombre para la carpeta
+        folder_name, ok = QInputDialog.getText(
+            self,
+            "Guardar Resultados",
+            "Introduce el nombre para la carpeta de resultados:",
+            text="resultados_roddier"
+        )
+
+        if not ok or not folder_name:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Guardar Coeficientes", "zernike_coeffs.txt", "Text Files (*.txt)")
-        if not path:
+
+        # Obtener el path de resultados del archivo de configuración
+        config_file = os.path.join(os.path.expanduser('~'), '.pyroddier', 'config.json')
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                results_path = config.get('results_path', '')
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Error al leer el archivo de configuración: {str(e)}")
             return
-        with open(path, 'w') as f:
-            for i, coeff in enumerate(self.zernike_coeffs):
-                name = ZERN_NAMES[i] if i < len(ZERN_NAMES) else f"Z{i+1}"
-                f.write(f"Z{i+1} - {name}: {coeff:.6f}\n")
+
+        if not results_path:
+            QMessageBox.warning(self, "Error", "No se ha configurado una ruta de resultados. Por favor, configure la ruta en el menú de configuración.")
+            return
+
+        # Crear la carpeta dentro del path de resultados
+        results_path = os.path.join(results_path, folder_name)
+        os.makedirs(results_path, exist_ok=True)
+
+        # Guardar las figuras
+        self.wavefront_fig.savefig(os.path.join(results_path, 'wavefront.png'), dpi=300, bbox_inches='tight')
+        self.histogram_fig.savefig(os.path.join(results_path, 'histogram.png'), dpi=300, bbox_inches='tight')
+        self.psf_fig.savefig(os.path.join(results_path, 'psf.png'), dpi=300, bbox_inches='tight')
+        # Guardar los coeficientes de Zernike en un archivo JSON
+        zernike_data = {
+            'coeficientes': self.zernike_coeffs.tolist(),
+            'parametros_telescopio': self.telescope_params,
+            'parametros_interferograma': self.interferogram_params
+        }
+
+        with open(os.path.join(results_path, 'zernike_coeffs.json'), 'w') as f:
+            json.dump(zernike_data, f, indent=4)
+
+        # Mostrar mensaje de éxito
+        QMessageBox.information(
+            self,
+            "Éxito",
+            f"Resultados guardados en:\n{results_path}"
+        )
 
     def _select_all_modes(self):
         """Marca todos los modos de Zernike de manera eficiente."""
@@ -363,3 +439,4 @@ class RoddierTestResultsWindow(QDialog):
         # Ajustar el layout para acomodar las etiquetas largas
         self.histogram_fig.subplots_adjust(bottom=0.3)  # Aumentar espacio para las etiquetas
         self.histogram_canvas.draw()
+

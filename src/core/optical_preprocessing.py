@@ -55,19 +55,90 @@ def estimate_defocus_mm(r_px, pixel_size_um, focal_length_mm, aperture_mm):
 
 def preprocess_roddier(intra_image, extra_image, apertura=900, focal=7200,
                           pixel_scale=15, threshold=0.5):
+    """
+    Preprocesa las imágenes intra y extra-focales para el análisis de Roddier.
+    
+    Args:
+        intra_image: Imagen intra-focal
+        extra_image: Imagen extra-focal
+        apertura: Apertura del telescopio en mm
+        focal: Distancia focal en mm
+        pixel_scale: Escala de pixel en micras
+        threshold: Umbral para estimación de radios
+    
+    Returns:
+        tuple: (delta_I_norm, annular_mask, center, R_out, dz_mm)
+    """
+    # Validar entradas
+    if intra_image is None or extra_image is None:
+        raise ValueError("Las imágenes intra y extra no pueden ser None")
+    
+    if intra_image.shape != extra_image.shape:
+        raise ValueError(f"Las imágenes deben tener el mismo tamaño: {intra_image.shape} vs {extra_image.shape}")
+    
+    if apertura <= 0 or focal <= 0 or pixel_scale <= 0:
+        raise ValueError("Los parámetros del telescopio deben ser positivos")
+    
+    if not (0 < threshold < 1):
+        raise ValueError("El threshold debe estar entre 0 y 1")
+    
+    if not (np.all(np.isfinite(intra_image)) and np.all(np.isfinite(extra_image))):
+        raise ValueError("Las imágenes contienen valores no finitos")
 
-    extra_aligned, _ = align_images(intra_image, extra_image)
-    intra_aligned = intra_image
-    # Normalizar imágenes entre 0 y 1 (ambas con los mismos límites)
-    img_avg = 0.5 * (intra_aligned + extra_aligned)
-    cx, cy = find_center(img_avg)
-    R_out, R_in = estimate_radii(img_avg, cx, cy, threshold=threshold)
-    dz_mm = estimate_defocus_mm(R_out, pixel_scale, focal, apertura)
-    annular_mask = generate_perfect_annular_mask(cx, cy, R_in, R_out, intra_image)
-    intra_masked = apply_mask(intra_aligned, annular_mask)
-    extra_masked = apply_mask(extra_aligned, annular_mask)
-    delta_I = extra_masked.astype(np.float64) - intra_masked.astype(np.float64)
-    I0 = 0.5 * (extra_masked + intra_masked)
-    delta_I_norm = np.divide(delta_I, I0, out=np.zeros_like(delta_I), where=I0 != 0)
+    try:
+        extra_aligned, _ = align_images(intra_image, extra_image)
+        intra_aligned = intra_image
+        
+        # Normalizar imágenes entre 0 y 1 (ambas con los mismos límites)
+        img_avg = 0.5 * (intra_aligned + extra_aligned)
+        
+        # Verificar que la imagen promedio es válida
+        if not np.any(img_avg > 0):
+            raise ValueError("La imagen promedio no contiene valores positivos")
+        
+        cx, cy = find_center(img_avg)
+        
+        # Validar centro
+        if not (0 <= cx < img_avg.shape[1] and 0 <= cy < img_avg.shape[0]):
+            raise ValueError(f"Centro calculado ({cx}, {cy}) está fuera de los límites de la imagen")
+        
+        R_out, R_in = estimate_radii(img_avg, cx, cy, threshold=threshold)
+        
+        # Validar radios
+        if R_out <= 0 or R_in < 0 or R_in >= R_out:
+            raise ValueError(f"Radios inválidos: R_in={R_in}, R_out={R_out}")
+        
+        # Verificar que los radios están dentro de la imagen
+        max_radius = min(cx, cy, img_avg.shape[1] - cx, img_avg.shape[0] - cy)
+        if R_out > max_radius:
+            raise ValueError(f"Radio exterior {R_out} es mayor que el máximo posible {max_radius}")
+        
+        dz_mm = estimate_defocus_mm(R_out, pixel_scale, focal, apertura)
+        
+        # Validar defocus
+        if dz_mm <= 0 or not np.isfinite(dz_mm):
+            raise ValueError(f"Distancia de defocus inválida: {dz_mm}")
+        
+        annular_mask = generate_perfect_annular_mask(cx, cy, R_in, R_out, intra_image)
+        
+        # Verificar que la máscara tiene píxeles válidos
+        if not np.any(annular_mask):
+            raise ValueError("La máscara anular está vacía")
+        
+        intra_masked = apply_mask(intra_aligned, annular_mask)
+        extra_masked = apply_mask(extra_aligned, annular_mask)
+        delta_I = extra_masked.astype(np.float64) - intra_masked.astype(np.float64)
+        I0 = 0.5 * (extra_masked + intra_masked)
+        delta_I_norm = np.divide(delta_I, I0, out=np.zeros_like(delta_I), where=I0 != 0)
+        
+        # Verificar resultado final
+        if not np.all(np.isfinite(delta_I_norm)):
+            raise ValueError("El resultado delta_I_norm contiene valores no finitos")
 
-    return delta_I_norm, annular_mask, (cx, cy), R_out, dz_mm
+        return delta_I_norm, annular_mask, (cx, cy), R_out, dz_mm
+    
+    except Exception as e:
+        if isinstance(e, ValueError):
+            raise
+        else:
+            raise ValueError(f"Error inesperado en preprocesamiento: {e}")

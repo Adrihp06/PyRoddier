@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Adrián Hernández Padrón
 # Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QDialog, QFrame, QScrollArea, QToolBar, QAction)
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QWidget, QMessageBox, QDialog, QFrame, QScrollArea, QToolBar, QAction, QApplication, QStyle)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage, QIcon
 from matplotlib.colors import Normalize
@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from src.core.roddier import calculate_wavefront
 from src.core.zernike import fit_zernike
-from src.common.utils import load_fits_image, calculate_center_of_mass, find_center
+from src.common.utils import load_fits_image, calculate_center_of_mass
 from src.core.optical_preprocessing import preprocess_roddier
 from src.gui.dialogs.roddiertestresults import RoddierTestResultsWindow
 from src.gui.dialogs.roddiertest import RoddierTestDialog
@@ -28,6 +28,19 @@ def get_resource_path(relative_path):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
     return os.path.join(base_path, relative_path)
+
+def load_icon_safe(icon_path, size=(24, 24)):
+    """Load an icon safely with fallback to default icon if file doesn't exist"""
+    try:
+        full_path = get_resource_path(icon_path)
+        if os.path.exists(full_path):
+            return QIcon(QPixmap(full_path).scaled(size[0], size[1], Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            # Fallback to a simple default icon using QStyle
+            return QApplication.style().standardIcon(QStyle.SP_FileIcon)
+    except Exception:
+        # Ultimate fallback - return empty icon
+        return QIcon()
 
 class FitsViewer(QMainWindow):
     def __init__(self):
@@ -61,12 +74,12 @@ class FitsViewer(QMainWindow):
             QToolBar {
                 background-color: #2b2b2b;
                 border: none;
-                padding: 4px;
+                padding: 2px;
             }
             QToolButton {
                 background-color: transparent;
                 border: none;
-                padding: 4px;
+                padding: 2px;
             }
             QToolButton:hover {
                 background-color: #404040;
@@ -77,7 +90,7 @@ class FitsViewer(QMainWindow):
         """)
 
         # Acción para el Test de Roddier
-        self.roddier_action = QAction(QIcon(get_resource_path('icons/roddier.png')), 'Test de Roddier', self)
+        self.roddier_action = QAction(load_icon_safe('icons/roddier.png', (28, 28)), 'Test de Roddier', self)
         self.roddier_action.setStatusTip('Ejecutar Test de Roddier')
         self.roddier_action.triggered.connect(self.run_roddier_test)
         self.toolbar.addAction(self.roddier_action)
@@ -86,7 +99,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para resetear con el nuevo icono de papelera
-        self.reset_action = QAction(QIcon(get_resource_path('icons/trash.png')), 'Borrar', self)
+        self.reset_action = QAction(load_icon_safe('icons/trash.png', (24, 24)), 'Borrar', self)
         self.reset_action.setStatusTip('Limpiar imágenes y resetear estado')
         self.reset_action.triggered.connect(self.reset_state)
         self.toolbar.addAction(self.reset_action)
@@ -95,7 +108,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para centrar imágenes
-        self.center_action = QAction(QIcon(get_resource_path('icons/center.png')), 'Centrar', self)
+        self.center_action = QAction(load_icon_safe('icons/center.png', (28, 28)), 'Centrar', self)
         self.center_action.setStatusTip('Centrar ambas imágenes')
         self.center_action.triggered.connect(self.center_both_images)
         self.toolbar.addAction(self.center_action)
@@ -104,7 +117,7 @@ class FitsViewer(QMainWindow):
         self.toolbar.addSeparator()
 
         # Acción para configuración
-        self.config_action = QAction(QIcon(get_resource_path('icons/settings.png')), 'Configuración', self)
+        self.config_action = QAction(load_icon_safe('icons/settings.png', (50, 50)), 'Configuración', self)
         self.config_action.setStatusTip('Abrir configuración')
         self.config_action.triggered.connect(self.run_config_dialog)
         self.toolbar.addAction(self.config_action)
@@ -368,44 +381,101 @@ class FitsViewer(QMainWindow):
             QMessageBox.warning(self, "Error", "Por favor, carga las imágenes intra y extra-focal primero.")
             return
 
-        roddier_dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
-        if roddier_dialog.exec_() == QDialog.Accepted:
-            cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
-            telescope_params = roddier_dialog.get_telescope_params()
-            roddier_params = roddier_dialog.get_roddier_params()
-            interferogram_params = roddier_dialog.get_interferogram_params()
+        try:
+            roddier_dialog = RoddierTestDialog(self.intra_image_data, self.extra_image_data, crop_size=250)
+            if roddier_dialog.exec_() == QDialog.Accepted:
+                # Obtener parámetros del diálogo
+                cropped_intra, cropped_extra = roddier_dialog.get_cropped_images()
+                telescope_params = roddier_dialog.get_telescope_params()
+                roddier_params = roddier_dialog.get_roddier_params()
+                interferogram_params = roddier_dialog.get_interferogram_params()
 
-            apertura = telescope_params['apertura']
-            focal = telescope_params['focal']
-            pixel_scale = telescope_params['tamano_pixel']
-            max_order = roddier_params['max_order']
-            threshold = roddier_params['threshold']
+                # Validar que se obtuvieron los parámetros correctamente
+                if telescope_params is None:
+                    QMessageBox.warning(self, "Error", "Error obteniendo parámetros del telescopio.")
+                    return
+                
+                if roddier_params is None:
+                    QMessageBox.warning(self, "Error", "Error obteniendo parámetros del test de Roddier.")
+                    return
 
-            delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_roddier(
-                cropped_intra,
-                cropped_extra,
-                apertura=apertura,
-                focal=focal,
-                pixel_scale=pixel_scale,
-                threshold=threshold
-            )
+                # Validar que se obtuvieron las imágenes recortadas
+                if cropped_intra is None or cropped_extra is None:
+                    QMessageBox.warning(self, "Error", "No se pudieron obtener las imágenes recortadas.")
+                    return
 
-            wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
+                # Extraer parámetros
+                apertura = telescope_params.get('apertura', 900.0)
+                focal = telescope_params.get('focal', 7200.0)
+                pixel_scale = telescope_params.get('tamano_pixel', 15.0)
+                max_order = roddier_params.get('max_order', 23)
+                threshold = roddier_params.get('threshold', 0.5)
 
-            zernike_coeffs, zernike_base = fit_zernike(
+                # Validar parámetros numéricos
+                if apertura <= 0 or focal <= 0 or pixel_scale <= 0:
+                    QMessageBox.warning(self, "Error", "Los parámetros del telescopio deben ser valores positivos.")
+                    return
+
+                # Preprocesar imágenes
+                delta_I_norm, annular_mask, center, R_out, dz_mm = preprocess_roddier(
+                    cropped_intra,
+                    cropped_extra,
+                    apertura=apertura,
+                    focal=focal,
+                    pixel_scale=pixel_scale,
+                    threshold=threshold
+                )
+
+                # Validar resultados del preprocesamiento
+                if delta_I_norm is None or annular_mask is None:
+                    QMessageBox.warning(self, "Error", "Error en el preprocesamiento de imágenes.")
+                    return
+
+                # Verificar que hay píxeles válidos en la máscara
+                if not np.any(annular_mask):
+                    QMessageBox.warning(self, "Error", "No se encontraron píxeles válidos en la máscara anular.")
+                    return
+
+                # Calculate average image
+                img_avg = 0.5 * (cropped_intra + cropped_extra)
+
+                # Calcular frente de onda
+                wavefront = calculate_wavefront(delta_I_norm, annular_mask, dz_mm=dz_mm)
+
+                # Validar frente de onda
+                if not np.any(np.isfinite(wavefront)):
+                    QMessageBox.warning(self, "Error", "Error en el cálculo del frente de onda.")
+                    return
+
+                # Ajustar coeficientes de Zernike
+                zernike_coeffs, zernike_base = fit_zernike(
                     wavefront, annular_mask, R_out, center, max_order
                 )
 
-            # Mostrar resultados en una única ventana
-            results_window = RoddierTestResultsWindow("Resultados del Test de Roddier", self)
-            results_window.update_plots(
-                zernike_coeffs=zernike_coeffs,
-                zernike_base=zernike_base,
-                annular_mask=annular_mask,
-                interferogram_params=interferogram_params,
-                telescope_params=telescope_params
-            )
-            results_window.show()
+                # Validar coeficientes
+                if zernike_coeffs is None or len(zernike_coeffs) == 0:
+                    QMessageBox.warning(self, "Error", "Error en el ajuste de coeficientes de Zernike.")
+                    return
+
+                # Mostrar resultados en una única ventana
+                results_window = RoddierTestResultsWindow("Resultados del Test de Roddier", self)
+                results_window.img_avg = img_avg
+                results_window.update_plots(
+                    zernike_coeffs=zernike_coeffs,
+                    zernike_base=zernike_base,
+                    annular_mask=annular_mask,
+                    interferogram_params=interferogram_params,
+                    telescope_params=telescope_params
+                )
+                results_window.show()
+
+        except Exception as e:
+            # Capturar cualquier excepción y mostrar error amigable
+            error_msg = f"Error durante el test de Roddier: {str(e)}"
+            QMessageBox.critical(self, "Error", error_msg)
+            print(f"Error detallado: {e}")
+            import traceback
+            traceback.print_exc()
 
     def reset_state(self):
         """Resetea el estado de la aplicación a su estado inicial."""
