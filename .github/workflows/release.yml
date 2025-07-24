@@ -81,7 +81,15 @@ jobs:
           APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
           
           # Use pyroddier.spec for consistent builds but override name
-          sed "s/name='pyroddier'/name='$APP_NAME'/g" pyroddier.spec > pyroddier_temp.spec
+          if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
+            # For macOS, also update the BUNDLE name
+            sed -e "s/name='pyroddier'/name='$APP_NAME'/g" \
+                -e "s/name='pyroddier.app'/name='$APP_NAME.app'/g" \
+                pyroddier.spec > pyroddier_temp.spec
+          else
+            # For Linux, only update the regular name
+            sed "s/name='pyroddier'/name='$APP_NAME'/g" pyroddier.spec > pyroddier_temp.spec
+          fi
           pyinstaller pyroddier_temp.spec --noconfirm --clean --distpath dist/
 
           cd dist
