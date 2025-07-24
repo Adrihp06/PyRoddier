@@ -81,15 +81,7 @@ jobs:
           APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
           
           # Use pyroddier.spec for consistent builds but override name
-          if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
-            # For macOS, also update the BUNDLE name
-            sed -e "s/name='pyroddier'/name='$APP_NAME'/g" \
-                -e "s/name='pyroddier.app'/name='$APP_NAME.app'/g" \
-                pyroddier.spec > pyroddier_temp.spec
-          else
-            # For Linux, only update the regular name
-            sed "s/name='pyroddier'/name='$APP_NAME'/g" pyroddier.spec > pyroddier_temp.spec
-          fi
+          sed "s/name='pyroddier'/name='$APP_NAME'/g" pyroddier.spec > pyroddier_temp.spec
           pyinstaller pyroddier_temp.spec --noconfirm --clean --distpath dist/
 
           cd dist
@@ -100,11 +92,16 @@ jobs:
 
           # Verify build output exists
           if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
-            if [[ -d "${APP_NAME}.app" ]]; then
+            # PyInstaller always creates pyroddier.app regardless of spec changes
+            if [[ -d "pyroddier.app" ]]; then
+              mv "pyroddier.app" "${APP_NAME}.app"
+              zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
+              rm -rf "${APP_NAME}.app"
+            elif [[ -d "${APP_NAME}.app" ]]; then
               zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
               rm -rf "${APP_NAME}.app"
             else
-              echo "Error: Expected ${APP_NAME}.app not found"
+              echo "Error: Neither pyroddier.app nor ${APP_NAME}.app found"
               ls -la
               exit 1
             fi
