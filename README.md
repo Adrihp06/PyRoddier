@@ -418,7 +418,7 @@ copies or substantial portions of the Software.
 **Adrián Hernández Padrón**
 - 📧 Email: adrianhdezp10@gmail.com
 - 🐙 GitHub: [@Adrihp06](https://github.com/Adrihp06)
-- 🔗 LinkedIn: [Adrián Hernández Padrón](https://linkedin.com/in/adrian-hernandez-padron)
+- 🔗 LinkedIn: [Adrián Hernández Padrón](https://linkedin.com/in/adrianhernandezpadron)
 
 ### Institución
 **Instituto de Astrofísica de Andalucía (IAA-CSIC)**
