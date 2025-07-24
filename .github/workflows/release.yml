@@ -27,21 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          
-      - name: Verify icon files exist
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            if [ ! -f "icons/pyroddier_logo.png" ]; then
-              echo "Warning: pyroddier_logo.png not found, build may fail"
-              ls -la icons/ || echo "icons directory not found"
-            fi
-          else
-            if [ ! -f "icons/pyroddier_logo.png" ]; then
-              echo "Warning: pyroddier_logo.png not found, build may fail"
-              ls -la icons/ || echo "icons directory not found"
-            fi
-          fi
-        shell: bash
 
       - name: Set platform name and extension
         run: |
@@ -62,27 +47,22 @@ jobs:
         shell: powershell
         run: |
           $env:APP_NAME = "pyroddier-windows-${{ env.TAG_NAME }}"
-          # Use pyroddier.spec for consistent builds but override name
-          (Get-Content pyroddier.spec) -replace "name='pyroddier'", "name='$env:APP_NAME'" | Set-Content pyroddier_temp.spec
-          pyinstaller pyroddier_temp.spec --noconfirm --clean --distpath dist
-          if (Test-Path "dist\$env:APP_NAME") {
-            Compress-Archive -Path "dist\$env:APP_NAME\*" -DestinationPath "dist\$env:APP_NAME.zip"
-          } elseif (Test-Path "dist\$env:APP_NAME.exe") {
-            Compress-Archive -Path "dist\$env:APP_NAME.exe" -DestinationPath "dist\$env:APP_NAME.zip"
-          } else {
-            Write-Error "Build output not found in expected location"
-            exit 1
-          }
+          pyinstaller src\main.py --noconfirm --clean --name $env:APP_NAME --distpath dist --add-data "icons;icons" --windowed --icon=icons\pyroddier_logo.png
+          Compress-Archive -Path "dist\$env:APP_NAME\*" -DestinationPath "dist\$env:APP_NAME.zip"
 
       - name: Build and compress executable (macOS/Linux)
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
-          
-          # Use pyroddier.spec for consistent builds but override name
-          sed "s/name='pyroddier'/name='$APP_NAME'/g" pyroddier.spec > pyroddier_temp.spec
-          pyinstaller pyroddier_temp.spec --noconfirm --clean --distpath dist/
+          pyinstaller src/main.py \
+            --noconfirm \
+            --clean \
+            --name "$APP_NAME" \
+            --distpath dist/ \
+            --add-data "icons:icons" \
+            --windowed \
+            --icon=icons/pyroddier_logo.png
 
           cd dist
 
@@ -90,33 +70,13 @@ jobs:
           find . -name '__pycache__' -type d -exec rm -r {} + || true
           find . -name '*.py[co]' -delete || true
 
-          # Verify build output exists
           if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
-            # PyInstaller creates pyroddier.app regardless of spec name changes
-            if [[ -d "pyroddier.app" ]]; then
-              mv "pyroddier.app" "${APP_NAME}.app"
-              zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
-              rm -rf "${APP_NAME}.app"
-            else
-              echo "Error: Expected pyroddier.app not found"
-              ls -la
-              exit 1
-            fi
+            zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
+            rm -rf "${APP_NAME}.app"
           elif [[ "${{ env.PLATFORM_NAME }}" == "linux" ]]; then
-            if [[ -d "${APP_NAME}" ]]; then
-              tar -czvf "${APP_NAME}.tar.gz" "${APP_NAME}"
-              rm -rf "${APP_NAME}"
-            else
-              echo "Error: Expected ${APP_NAME} directory not found"
-              ls -la
-              exit 1
-            fi
+            tar -czvf "${APP_NAME}.tar.gz" "${APP_NAME}"
+            rm -rf "${APP_NAME}"
           fi
-
-      - name: Cleanup temporary files
-        run: |
-          rm -f pyroddier_temp.spec
-        shell: bash
 
       - name: Upload compressed artifact
         uses: actions/upload-artifact@v4
@@ -140,9 +100,6 @@ jobs:
         id: find_assets
         shell: bash
         run: |
-          echo "=== Searching for built artifacts ==="
-          find artifacts/ -type f -name "*.zip" -o -name "*.tar.gz" | sort
-          
           WINDOWS_ASSET=$(find artifacts/ -type f -name "*windows*.zip" | head -n 1)
           MAC_ASSET=$(find artifacts/ -type f -name "*mac*.zip" | head -n 1)
           LINUX_ASSET=$(find artifacts/ -type f -name "*linux*.tar.gz" | head -n 1)
@@ -151,34 +108,15 @@ jobs:
           echo "mac_asset=$MAC_ASSET" >> $GITHUB_OUTPUT
           echo "linux_asset=$LINUX_ASSET" >> $GITHUB_OUTPUT
 
-          echo "=== Found assets ==="
-          echo "Windows: $WINDOWS_ASSET"
-          echo "macOS: $MAC_ASSET" 
-          echo "Linux: $LINUX_ASSET"
-
           echo "### Downloads" > release_notes.md
-          echo "" >> release_notes.md
-          
-          assets_found=0
           if [[ -f "$WINDOWS_ASSET" ]]; then
             echo "- [Windows]($(basename "$WINDOWS_ASSET"))" >> release_notes.md
-            assets_found=$((assets_found + 1))
           fi
           if [[ -f "$MAC_ASSET" ]]; then
             echo "- [macOS]($(basename "$MAC_ASSET"))" >> release_notes.md
-            assets_found=$((assets_found + 1))
           fi
           if [[ -f "$LINUX_ASSET" ]]; then
             echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
-            assets_found=$((assets_found + 1))
-          fi
-          
-          if [[ $assets_found -eq 0 ]]; then
-            echo "❌ No assets found for release!" >> release_notes.md
-            echo "ERROR: No built assets found for release"
-            exit 1
-          else
-            echo "✅ Found $assets_found platform builds" >> release_notes.md
           fi
 
       - name: Upload to GitHub Release
