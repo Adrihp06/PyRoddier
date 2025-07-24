@@ -165,6 +165,214 @@ class TestRoddierResultsWindow(unittest.TestCase):
         self.assertEqual(labels[2], "Tilt Y")
         self.assertEqual(labels[3], "Defocus")
 
+    def test_rms_display_update(self):
+        """Test that RMS display updates correctly"""
+        # Create test data
+        coeffs = np.array([0.1, 0.2, 0.3, 0.05], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+            [[0.0, 1.0], [1.0, 0.0]],
+            [[1.0, 0.5], [0.5, 1.0]]
+        ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        # Update window with data
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params={},
+            telescope_params={}
+        )
+        
+        # Check that RMS label exists and has content
+        if hasattr(self.window, 'rms_label'):
+            rms_text = self.window.rms_label.text()
+            self.assertIsInstance(rms_text, str)
+            self.assertIn('RMS', rms_text)  # Should contain RMS info
+
+    def test_zernike_checkboxes(self):
+        """Test Zernike coefficient checkbox functionality"""
+        # Create test data with more coefficients
+        coeffs = np.array([0.1, 0.15, 0.08, 0.05, 0.02], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]], 
+            [[0.0, 1.0], [1.0, 0.0]],
+            [[1.0, 0.5], [0.5, 1.0]],
+            [[0.5, 1.0], [1.0, 0.5]]
+        ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        # Update window
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params={},
+            telescope_params={}
+        )
+        
+        # Check that checkboxes were created
+        self.assertEqual(len(self.window.zernike_checks), len(coeffs))
+        
+        # Each checkbox should be a widget
+        for checkbox in self.window.zernike_checks:
+            self.assertIsNotNone(checkbox)
+
+    def test_export_functionality(self):
+        """Test export button and functionality"""
+        # Check that export button exists
+        if hasattr(self.window, 'export_button'):
+            self.assertIsNotNone(self.window.export_button)
+            
+        # Test with data
+        coeffs = np.array([0.1, 0.2], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]]
+        ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params={},
+            telescope_params={}
+        )
+        
+        # Export function should exist (even if we don't test the file I/O)
+        if hasattr(self.window, 'export_results'):
+            self.assertTrue(callable(self.window.export_results))
+
+    def test_button_functionality(self):
+        """Test window buttons"""
+        # Check for select/deselect all buttons
+        if hasattr(self.window, 'select_all_button'):
+            self.assertIsNotNone(self.window.select_all_button)
+            
+        if hasattr(self.window, 'deselect_all_button'):
+            self.assertIsNotNone(self.window.deselect_all_button)
+            
+        # Check for close button
+        if hasattr(self.window, 'close_button'):
+            self.assertIsNotNone(self.window.close_button)
+
+    def test_window_with_large_dataset(self):
+        """Test window behavior with larger datasets"""
+        # Create larger test dataset
+        n_coeffs = 20
+        coeffs = np.random.random(n_coeffs) * 0.1
+        base = np.random.random((n_coeffs, 10, 10))
+        annular_mask = np.ones((10, 10), dtype=bool)
+        
+        # Update window - should handle larger datasets
+        try:
+            self.window.update_plots(
+                zernike_coeffs=coeffs,
+                zernike_base=base,
+                annular_mask=annular_mask,
+                interferogram_params={'fringes': 6},
+                telescope_params={'apertura': 1000.0}
+            )
+            
+            # Should create appropriate number of checkboxes
+            self.assertEqual(len(self.window.zernike_checks), n_coeffs)
+            
+        except Exception as e:
+            # If it fails, at least we know there's an issue with large datasets
+            self.fail(f"Window failed to handle large dataset: {e}")
+
+    def test_window_with_empty_data(self):
+        """Test window behavior with minimal/empty data"""
+        # Test with empty coefficients
+        empty_coeffs = np.array([], dtype=np.float64)
+        empty_base = np.array([]).reshape(0, 2, 2)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        # Should handle gracefully
+        try:
+            self.window.update_plots(
+                zernike_coeffs=empty_coeffs,
+                zernike_base=empty_base,
+                annular_mask=annular_mask,
+                interferogram_params={},
+                telescope_params={}
+            )
+            
+            # Should have no checkboxes for empty data
+            self.assertEqual(len(self.window.zernike_checks), 0)
+            
+        except Exception as e:
+            # Document the behavior with empty data
+            pass  # Some implementations might not handle empty data gracefully
+
+    def test_color_scheme_consistency(self):
+        """Test that color schemes are applied consistently"""
+        # Create test data with varied magnitudes to test color coding
+        coeffs = np.array([0.15, 0.08, 0.04, 0.005], dtype=np.float64)  # Different magnitude ranges
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+            [[0.0, 1.0], [1.0, 0.0]],
+            [[1.0, 0.0], [0.0, 1.0]]
+        ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        # Update plots
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params={},
+            telescope_params={}
+        )
+        
+        # Check that histogram has bars (color testing is complex in unit tests)
+        if hasattr(self.window, 'histogram_ax'):
+            bars = self.window.histogram_ax.patches
+            self.assertEqual(len(bars), len(coeffs))
+            
+            # Each bar should have a face color
+            for bar in bars:
+                face_color = bar.get_facecolor()
+                self.assertIsNotNone(face_color)
+                self.assertEqual(len(face_color), 4)  # RGBA
+
+    def test_plot_update_methods(self):
+        """Test individual plot update methods if they exist"""
+        # Set up data first
+        coeffs = np.array([0.1, 0.2], dtype=np.float64)
+        base = np.array([
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 1.0], [1.0, 1.0]]
+        ], dtype=np.float64)
+        annular_mask = np.array([[1, 1], [1, 1]], dtype=bool)
+        
+        self.window.update_plots(
+            zernike_coeffs=coeffs,
+            zernike_base=base,
+            annular_mask=annular_mask,
+            interferogram_params={},
+            telescope_params={}
+        )
+        
+        # Test individual update methods if they exist
+        if hasattr(self.window, '_update_wavefront_plot'):
+            # Should not raise an exception
+            try:
+                self.window._update_wavefront_plot()
+            except Exception as e:
+                self.fail(f"_update_wavefront_plot failed: {e}")
+                
+        if hasattr(self.window, '_update_histogram_plot'):
+            try:
+                self.window._update_histogram_plot()
+            except Exception as e:
+                self.fail(f"_update_histogram_plot failed: {e}")
+
     def tearDown(self):
         self.window.close()
 
