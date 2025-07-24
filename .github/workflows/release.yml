@@ -92,26 +92,13 @@ jobs:
 
           # Verify build output exists
           if [[ "${{ env.PLATFORM_NAME }}" == "mac" ]]; then
-            echo "=== WORKFLOW UPDATED v2024-07-24 ==="
-            echo "Debug: Looking for macOS build artifacts"
-            ls -la
-            echo "Expected APP_NAME: ${APP_NAME}"
-            
-            # FORCE UPDATE: PyInstaller creates pyroddier.app, we need to rename it
+            # PyInstaller creates pyroddier.app regardless of spec name changes
             if [[ -d "pyroddier.app" ]]; then
-              echo "SUCCESS: Found pyroddier.app, renaming to ${APP_NAME}.app"
               mv "pyroddier.app" "${APP_NAME}.app"
-              echo "Renamed successfully, now zipping..."
-              zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
-              rm -rf "${APP_NAME}.app"
-              echo "Zip created: ${APP_NAME}.zip"
-            elif [[ -d "${APP_NAME}.app" ]]; then
-              echo "Found ${APP_NAME}.app directly (unexpected but OK)"
               zip -r "${APP_NAME}.zip" "${APP_NAME}.app"
               rm -rf "${APP_NAME}.app"
             else
-              echo "CRITICAL ERROR: Neither pyroddier.app nor ${APP_NAME}.app found"
-              echo "Available files:"
+              echo "Error: Expected pyroddier.app not found"
               ls -la
               exit 1
             fi
