@@ -47,6 +47,15 @@ class FitsViewer(QMainWindow):
         super().__init__()
         self.setWindowTitle("Test de Roddier con Zernike")
         self.setGeometry(100, 100, 1200, 800)
+        
+        # Obtener el tamaño de la pantalla y establecer máximo al 70%
+        from PyQt5.QtWidgets import QDesktopWidget
+        screen = QDesktopWidget().screenGeometry()
+        max_width = int(screen.width() * 0.7)
+        max_height = int(screen.height() * 0.7)
+        
+        # Establecer tamaño máximo
+        self.setMaximumSize(max_width, max_height)
 
         # Get configuration paths
         config_paths = get_config_paths()

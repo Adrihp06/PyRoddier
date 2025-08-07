@@ -108,16 +108,52 @@ jobs:
           echo "mac_asset=$MAC_ASSET" >> $GITHUB_OUTPUT
           echo "linux_asset=$LINUX_ASSET" >> $GITHUB_OUTPUT
 
-          echo "### Downloads" > release_notes.md
+          # Get the repository URL and tag name
+          REPO_URL="https://github.com/${{ github.repository }}"
+          TAG_NAME="${{ github.ref_name }}"
+          
+          echo "## 🚀 PyRoddier Release $TAG_NAME" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📦 Downloads" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Select the appropriate version for your operating system:" >> release_notes.md
+          echo "" >> release_notes.md
+          
           if [[ -f "$WINDOWS_ASSET" ]]; then
-            echo "- [Windows]($(basename "$WINDOWS_ASSET"))" >> release_notes.md
+            WINDOWS_NAME=$(basename "$WINDOWS_ASSET")
+            echo "#### 🪟 Windows" >> release_notes.md
+            echo "- **[Download $WINDOWS_NAME]($REPO_URL/releases/download/$TAG_NAME/$WINDOWS_NAME)**" >> release_notes.md
+            echo "  - Extract the ZIP file and run the executable" >> release_notes.md
+            echo "" >> release_notes.md
           fi
+          
           if [[ -f "$MAC_ASSET" ]]; then
-            echo "- [macOS]($(basename "$MAC_ASSET"))" >> release_notes.md
+            MAC_NAME=$(basename "$MAC_ASSET")
+            echo "#### 🍎 macOS" >> release_notes.md
+            echo "- **[Download $MAC_NAME]($REPO_URL/releases/download/$TAG_NAME/$MAC_NAME)**" >> release_notes.md
+            echo "  - Extract the ZIP file and run the .app bundle" >> release_notes.md
+            echo "  - You may need to allow the app in System Preferences > Security & Privacy" >> release_notes.md
+            echo "" >> release_notes.md
           fi
+          
           if [[ -f "$LINUX_ASSET" ]]; then
-            echo "- [Linux]($(basename "$LINUX_ASSET"))" >> release_notes.md
+            LINUX_NAME=$(basename "$LINUX_ASSET")
+            echo "#### 🐧 Linux" >> release_notes.md
+            echo "- **[Download $LINUX_NAME]($REPO_URL/releases/download/$TAG_NAME/$LINUX_NAME)**" >> release_notes.md
+            echo "  - Extract: \`tar -xzvf $LINUX_NAME\`" >> release_notes.md
+            echo "  - Make executable: \`chmod +x pyroddier-linux-$TAG_NAME/pyroddier-linux-$TAG_NAME\`" >> release_notes.md
+            echo "  - Run: \`./pyroddier-linux-$TAG_NAME/pyroddier-linux-$TAG_NAME\`" >> release_notes.md
+            echo "" >> release_notes.md
           fi
+          
+          echo "### 📋 Requirements" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- No Python installation required" >> release_notes.md
+          echo "- All dependencies are included in the executable" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 🐛 Issues" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "If you encounter any issues, please report them [here]($REPO_URL/issues)" >> release_notes.md
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v1

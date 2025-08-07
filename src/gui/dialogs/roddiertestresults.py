@@ -45,6 +45,15 @@ class RoddierTestResultsWindow(QDialog):
         self.setWindowTitle(title)
         self.setModal(False)
         self.setMinimumSize(1600, 800)
+        
+        # Obtener el tamaño de la pantalla y establecer máximo al 70%
+        from PyQt5.QtWidgets import QDesktopWidget
+        screen = QDesktopWidget().screenGeometry()
+        max_width = int(screen.width() * 0.7)
+        max_height = int(screen.height() * 0.7)
+        
+        # Establecer tamaño máximo
+        self.setMaximumSize(max_width, max_height)
 
         self.zernike_coeffs = None
         self.zernike_base = None
@@ -168,7 +177,7 @@ class RoddierTestResultsWindow(QDialog):
             label = f"Z{i+1} – {name} ({coeff:.3f})"
             cb = QCheckBox(label)
             cb.setChecked(i != 0)
-            cb.stateChanged.connect(self._update_wavefront_plot)
+            cb.stateChanged.connect(self._on_checkbox_changed)
 
             magnitude = abs(coeff)
             color = QColor("lightgray")
@@ -189,12 +198,40 @@ class RoddierTestResultsWindow(QDialog):
             self.zernike_checks.append(cb)
 
     def _update_rms_display(self):
-        """Actualiza la etiqueta del RMS"""
-        if self.zernike_coeffs is None:
+        """Actualiza la etiqueta del RMS basado en aberraciones activas"""
+        if self.zernike_coeffs is None or not self.zernike_checks:
             return
         
-        rms_value = calculate_rms(self.zernike_coeffs, exclude_piston=True)
-        self.rms_label.setText(f"RMS (sin pistón): {rms_value:.4f}")
+        # Crear array de coeficientes activos
+        active_coeffs = []
+        max_terms = min(len(self.zernike_checks), 23)
+        
+        for i in range(max_terms):
+            if self.zernike_checks[i].isChecked():
+                if i == 22:  # Último término (22) es la suma de los superiores
+                    # Sumar todos los coeficientes por encima del término 22
+                    for j in range(22, len(self.zernike_coeffs)):
+                        active_coeffs.append(self.zernike_coeffs[j])
+                else:
+                    active_coeffs.append(self.zernike_coeffs[i])
+        
+        # Calcular RMS solo de los coeficientes activos
+        if active_coeffs:
+            # Excluir pistón si está activo
+            coeffs_for_rms = active_coeffs[1:] if self.zernike_checks[0].isChecked() and len(active_coeffs) > 1 else active_coeffs
+            if coeffs_for_rms:
+                rms_value = np.sqrt(np.mean(np.array(coeffs_for_rms)**2))
+            else:
+                rms_value = 0.0
+        else:
+            rms_value = 0.0
+            
+        self.rms_label.setText(f"RMS (aberraciones activas, sin pistón): {rms_value:.4f}")
+    
+    def _on_checkbox_changed(self):
+        """Callback cuando cambia el estado de un checkbox"""
+        self._update_rms_display()
+        self._update_wavefront_plot()
 
     def _update_wavefront_plot(self):
         if self.zernike_base is None or self.zernike_coeffs is None:
@@ -391,7 +428,8 @@ class RoddierTestResultsWindow(QDialog):
             cb.blockSignals(True)
             cb.setChecked(True)
             cb.blockSignals(False)
-        # Actualizar el plot una sola vez
+        # Actualizar el plot y RMS una sola vez
+        self._update_rms_display()
         self._update_wavefront_plot()
 
     def _deselect_all_modes(self):
@@ -401,7 +439,8 @@ class RoddierTestResultsWindow(QDialog):
             cb.blockSignals(True)
             cb.setChecked(False)
             cb.blockSignals(False)
-        # Actualizar el plot una sola vez
+        # Actualizar el plot y RMS una sola vez
+        self._update_rms_display()
         self._update_wavefront_plot()
 
     def _update_histogram(self):
