@@ -17,16 +17,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.11'
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          uv sync --all-extras
+          uv pip install pyinstaller
 
       - name: Set platform name and extension
         run: |
@@ -47,7 +50,7 @@ jobs:
         shell: powershell
         run: |
           $env:APP_NAME = "pyroddier-windows-${{ env.TAG_NAME }}"
-          pyinstaller src\main.py --noconfirm --clean --name $env:APP_NAME --distpath dist --add-data "icons;icons" --windowed --icon=icons\pyroddier_logo.png
+          uv run pyinstaller src\main.py --noconfirm --clean --name $env:APP_NAME --distpath dist --add-data "icons;icons" --windowed --icon=icons\pyroddier_logo.png
           Compress-Archive -Path "dist\$env:APP_NAME\*" -DestinationPath "dist\$env:APP_NAME.zip"
 
       - name: Build and compress executable (macOS/Linux)
@@ -55,7 +58,7 @@ jobs:
         shell: bash
         run: |
           APP_NAME="pyroddier-${{ env.PLATFORM_NAME }}-${TAG_NAME}"
-          pyinstaller src/main.py \
+          uv run pyinstaller src/main.py \
             --noconfirm \
             --clean \
             --name "$APP_NAME" \

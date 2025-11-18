@@ -115,7 +115,36 @@ Donde:
 - **RAM**: Mínimo 4GB, recomendado 8GB
 - **Espacio en disco**: 500MB para instalación completa
 
-### Instalación desde Código Fuente
+### Instalación con uv (Recomendado) ⚡
+
+**[uv](https://github.com/astral-sh/uv)** es un gestor de paquetes ultrarrápido para Python. Recomendamos este método por su velocidad y reproducibilidad.
+
+1. **Instalar uv** (si no lo tienes):
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+2. **Clonar el repositorio**:
+```bash
+git clone https://github.com/Adrihp06/PyRoddier.git
+cd PyRoddier
+```
+
+3. **Sincronizar dependencias** (crea automáticamente el entorno virtual):
+```bash
+uv sync --all-extras
+```
+
+4. **Ejecutar la aplicación**:
+```bash
+uv run python src/main.py
+```
+
+### Instalación Tradicional (pip)
 
 1. **Clonar el repositorio**:
 ```bash
@@ -133,7 +162,7 @@ venv\Scripts\activate     # En Windows
 
 3. **Instalar dependencias**:
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 4. **Ejecutar la aplicación**:
