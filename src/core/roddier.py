@@ -39,7 +39,8 @@ def calculate_wavefront(delta_I_norm, annular_mask, wavelength_nm=555, dz_mm=Non
 
     if dz_mm is not None:
         wavelength_mm = wavelength_nm / 1e6
-        factor = (wavelength_mm / (4 * np.pi)) * dz_mm
+        # Roddier formula: W = λ/(8π²d) × ∇⁻²(ΔI/I₀)
+        factor = wavelength_mm / (8 * np.pi**2 * dz_mm)
         wavefront *= factor
 
     wavefront *= -pupil_mask_float
