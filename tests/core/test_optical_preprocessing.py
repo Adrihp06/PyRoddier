@@ -242,5 +242,57 @@ class TestOpticalPreprocessing(unittest.TestCase):
         self.assertEqual(result_small[0].shape, small_intra.shape)
         self.assertGreater(result_small[3], 0)  # R_out should still be positive
 
+    def test_preprocess_roddier_validation_none_images(self):
+        """Test preprocess_roddier validation for None images"""
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(None, self.extra_img)
+        self.assertIn("None", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, None)
+        self.assertIn("None", str(context.exception))
+
+    def test_preprocess_roddier_validation_different_shapes(self):
+        """Test preprocess_roddier validation for different image shapes"""
+        wrong_shape_img = np.random.rand(64, 64) * 1000 + 100
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, wrong_shape_img)
+        self.assertIn("mismo tamaño", str(context.exception))
+
+    def test_preprocess_roddier_validation_negative_params(self):
+        """Test preprocess_roddier validation for negative parameters"""
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, self.extra_img, apertura=-100)
+        self.assertIn("positivos", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, self.extra_img, focal=-1000)
+        self.assertIn("positivos", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, self.extra_img, pixel_scale=-5)
+        self.assertIn("positivos", str(context.exception))
+
+    def test_preprocess_roddier_validation_invalid_threshold(self):
+        """Test preprocess_roddier validation for invalid threshold"""
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, self.extra_img, threshold=0)
+        self.assertIn("threshold", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(self.intra_img, self.extra_img, threshold=1.5)
+        self.assertIn("threshold", str(context.exception))
+
+    def test_preprocess_roddier_validation_nan_images(self):
+        """Test preprocess_roddier validation for images with NaN"""
+        nan_intra = self.intra_img.copy()
+        nan_intra[10:20, 10:20] = np.nan
+
+        with self.assertRaises(ValueError) as context:
+            preprocess_roddier(nan_intra, self.extra_img)
+        self.assertIn("no finitos", str(context.exception))
+
+
 if __name__ == '__main__':
     unittest.main()

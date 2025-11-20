@@ -73,18 +73,16 @@ class TestPSFCalculations(unittest.TestCase):
 
     def test_calculate_psf_edge_cases(self):
         """Test PSF calculation edge cases"""
-        # Test with zero pupil mask
+        # Test with zero pupil mask - should raise ValueError
         zero_mask = np.zeros((self.size, self.size))
-        psf, psf_log = calculate_psf(self.flat_wavefront, zero_mask)
-        
-        # With zero mask, PSF may contain inf/nan values
-        # Just check that the calculation completed
-        self.assertIsNotNone(psf)
-        
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(self.flat_wavefront, zero_mask)
+        self.assertIn("PSF calculado es cero", str(context.exception))
+
         # Test with very large wavefront values
         large_wavefront = np.ones((self.size, self.size)) * 10
         psf, psf_log = calculate_psf(large_wavefront, self.pupil_mask)
-        
+
         # Should still be finite
         self.assertTrue(np.all(np.isfinite(psf)))
         self.assertTrue(np.all(np.isfinite(psf_log)))
@@ -129,6 +127,48 @@ class TestPSFCalculations(unittest.TestCase):
         self.assertLess(np.max(np.abs(q1 - np.fliplr(q2))), tolerance)
         self.assertLess(np.max(np.abs(q1 - np.flipud(q3))), tolerance)
         self.assertLess(np.max(np.abs(q1 - np.flipud(np.fliplr(q4)))), tolerance)
+
+    def test_calculate_psf_validation_negative_wavelength(self):
+        """Test PSF calculation with negative wavelength"""
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(self.flat_wavefront, self.pupil_mask, wavelength=-100)
+        self.assertIn("wavelength", str(context.exception))
+        self.assertIn("positivo", str(context.exception))
+
+    def test_calculate_psf_validation_zero_wavelength(self):
+        """Test PSF calculation with zero wavelength"""
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(self.flat_wavefront, self.pupil_mask, wavelength=0)
+        self.assertIn("wavelength", str(context.exception))
+
+    def test_calculate_psf_validation_nan_wavefront(self):
+        """Test PSF calculation with NaN in wavefront"""
+        nan_wavefront = self.flat_wavefront.copy()
+        nan_wavefront[10:20, 10:20] = np.nan
+
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(nan_wavefront, self.pupil_mask)
+        self.assertIn("wavefront", str(context.exception))
+        self.assertIn("no finitos", str(context.exception))
+
+    def test_calculate_psf_validation_nan_mask(self):
+        """Test PSF calculation with NaN in pupil mask"""
+        nan_mask = self.pupil_mask.copy().astype(float)
+        nan_mask[10:20, 10:20] = np.nan
+
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(self.flat_wavefront, nan_mask)
+        self.assertIn("pupila_mask", str(context.exception))
+        self.assertIn("no finitos", str(context.exception))
+
+    def test_calculate_psf_validation_mismatched_dimensions(self):
+        """Test PSF calculation with mismatched dimensions"""
+        small_mask = np.ones((32, 32))
+
+        with self.assertRaises(ValueError) as context:
+            calculate_psf(self.flat_wavefront, small_mask)
+        self.assertIn("dimensiones", str(context.exception))
+
 
 if __name__ == '__main__':
     unittest.main()
