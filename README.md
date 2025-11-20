@@ -112,11 +112,14 @@ Donde:
 ### Requisitos del Sistema
 - **Python 3.11 o superior**
 - **Sistema operativo**:
-  - ✅ **Windows 10+** (Totalmente soportado)
-  - ✅ **macOS 10.14+** (Totalmente soportado)
+  - ✅ **macOS 10.14+** (Totalmente soportado, incluyendo Apple Silicon)
   - ✅ **Linux Ubuntu 18+** (Totalmente soportado)
+  - ⚠️ **Windows 10+** (Soportado con configuración especial - ver abajo)
 - **RAM**: Mínimo 4GB, recomendado 8GB
 - **Espacio en disco**: 500MB para instalación completa
+
+> **Nota para usuarios de Windows**: Debido a limitaciones en PyQt5-Qt5, la instalación en Windows requiere
+> pasos adicionales. Ver la sección [Instalación en Windows](#instalación-en-windows) más abajo.
 
 ### Instalación con uv (Recomendado) ⚡
 
@@ -138,14 +141,46 @@ cd PyRoddier
 ```
 
 3. **Sincronizar dependencias** (crea automáticamente el entorno virtual):
+
+**macOS y Linux:**
 ```bash
 uv sync --all-extras
+```
+
+**Windows:**
+```powershell
+# Instalación especial para Windows (requiere versiones específicas de PyQt5)
+uv sync --all-extras --no-build
+uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<13,>=12.11"
 ```
 
 4. **Ejecutar la aplicación**:
 ```bash
 uv run python src/main.py
 ```
+
+### Instalación en Windows
+
+Debido a limitaciones en las versiones más recientes de PyQt5-Qt5 (que no tienen wheels para Windows),
+los usuarios de Windows necesitan instalar versiones específicas:
+
+```powershell
+# Después de clonar el repositorio
+cd PyRoddier
+
+# Instalar uv si no lo tienes
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Instalar dependencias con versiones compatibles con Windows
+uv sync --all-extras --no-build
+uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<13,>=12.11"
+
+# Ejecutar
+uv run python src/main.py
+```
+
+**Alternativa**: Usar WSL2 (Windows Subsystem for Linux) para evitar problemas de compatibilidad.
+Ver `docs/WINDOWS_INSTALL.md` para más detalles.
 
 ### Instalación Tradicional (pip)
 

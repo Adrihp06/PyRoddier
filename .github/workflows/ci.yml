@@ -30,8 +30,15 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install dependencies (non-Windows)
+        if: matrix.os != 'windows-latest'
         run: uv sync --all-extras --dev
+
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          uv sync --all-extras --dev --no-build
+          uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<13,>=12.11"
 
       - name: Set Qt to offscreen mode (Linux)
         if: matrix.os == 'ubuntu-latest'
