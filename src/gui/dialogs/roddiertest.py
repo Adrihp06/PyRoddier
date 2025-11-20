@@ -49,7 +49,8 @@ class RoddierTestDialog(QDialog):
         self.roddier_params = {
             'max_order': 23,  # orden máximo de Zernike
             'threshold': 0.5,  # threshold para la máscara
-            'crop_size': crop_size  # tamaño del recorte
+            'crop_size': crop_size,  # tamaño del recorte
+            'wavelength_nm': 555  # longitud de onda en nanómetros (por defecto luz verde)
         }
 
         # Interferogram parameters
@@ -146,6 +147,11 @@ class RoddierTestDialog(QDialog):
         self.threshold_edit = QLineEdit()
         self.threshold_edit.setText("0.5")
         roddier_layout.addRow("Threshold:", self.threshold_edit)
+
+        # Campo para wavelength (longitud de onda)
+        self.wavelength_edit = QLineEdit()
+        self.wavelength_edit.setText("555")
+        roddier_layout.addRow("Longitud de onda (nm):", self.wavelength_edit)
 
         roddier_group.setLayout(roddier_layout)
         layout.addWidget(roddier_group)
@@ -386,11 +392,29 @@ class RoddierTestDialog(QDialog):
                 self.max_order_edit.setText("23")
             if not self.threshold_edit.text():
                 self.threshold_edit.setText("0.5")
+            if not self.wavelength_edit.text():
+                self.wavelength_edit.setText("555")
+
+            wavelength_nm = float(self.wavelength_edit.text())
+
+            # Validar que la longitud de onda esté en un rango razonable (UV a IR cercano)
+            if wavelength_nm < 300 or wavelength_nm > 1000:
+                QMessageBox.warning(
+                    self,
+                    "Advertencia",
+                    f"La longitud de onda ({wavelength_nm} nm) está fuera del rango típico (300-1000 nm).\n"
+                    "Valores comunes:\n"
+                    "- 400 nm (violeta)\n"
+                    "- 555 nm (verde, por defecto)\n"
+                    "- 700 nm (rojo)\n"
+                    "¿Estás seguro de continuar?"
+                )
 
             return {
                 'max_order': int(self.max_order_edit.text()),
                 'threshold': float(self.threshold_edit.text()),
-                'crop_size': self.crop_size
+                'crop_size': self.crop_size,
+                'wavelength_nm': wavelength_nm
             }
         except ValueError:
             QMessageBox.warning(self, "Error", "Por favor, introduce valores numéricos válidos para los parámetros del test de Roddier.")
