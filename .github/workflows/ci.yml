@@ -11,8 +11,7 @@ jobs:
       - name: Set up Python and install dependencies
         run: |
           uv venv
-          uv pip install -r requirements.txt
-          uv pip install coverage
+          uv sync --dev
       - name: Set Qt to offscreen mode
         run: echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
       - name: Run tests
