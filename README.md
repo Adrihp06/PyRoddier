@@ -111,7 +111,10 @@ Donde:
 
 ### Requisitos del Sistema
 - **Python 3.11 o superior**
-- **Sistema operativo**: Windows 10+, macOS 10.14+, Linux Ubuntu 18+
+- **Sistema operativo**:
+  - ✅ **Windows 10+** (Totalmente soportado)
+  - ✅ **macOS 10.14+** (Totalmente soportado)
+  - ✅ **Linux Ubuntu 18+** (Totalmente soportado)
 - **RAM**: Mínimo 4GB, recomendado 8GB
 - **Espacio en disco**: 500MB para instalación completa
 

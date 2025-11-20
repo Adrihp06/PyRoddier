@@ -21,7 +21,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "PyQt5>=5.15.0",
+    "PyQt5==5.15.9",  # Fixed version with guaranteed Windows wheel support
+    "PyQt5-Qt5==5.15.2; platform_system == 'Windows'",  # Windows-specific Qt5 binaries
     "numpy>=1.19.0",
     "matplotlib>=3.3.0",
     "astropy>=4.0.0",
