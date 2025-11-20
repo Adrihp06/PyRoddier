@@ -21,7 +21,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "PyQt5>=5.15.0",  # Use latest available for best platform support
+    "PyQt5==5.15.11",  # Fixed version that works on all platforms including Windows
+    "PyQt5-Qt5==5.15.15",  # Fixed Qt5 binaries version
+    "PyQt5-sip>=12.16.0,<13",  # Compatible sip version
     "numpy>=1.19.0",
     "matplotlib>=3.3.0",
     "astropy>=4.0.0",
