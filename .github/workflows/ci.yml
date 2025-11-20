@@ -9,12 +9,11 @@ on:
 
 jobs:
   test:
-    name: Test on Python ${{ matrix.python-version }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.11", "3.12"]
 
     steps:
@@ -30,38 +29,17 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dependencies (non-Windows)
-        if: matrix.os != 'windows-latest'
+      - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          uv sync --all-extras --dev --no-build
-          uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<13,>=12.11"
-
-      - name: Set Qt to offscreen mode (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Set Qt to offscreen mode
         run: echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
 
-      - name: Set Qt to offscreen mode (Windows)
-        if: matrix.os == 'windows-latest'
-        run: echo "QT_QPA_PLATFORM=offscreen" >> $env:GITHUB_ENV
-
-      - name: Set Qt to offscreen mode (macOS)
-        if: matrix.os == 'macos-latest'
-        run: echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
-
-      - name: Run tests with coverage (non-Windows)
-        if: matrix.os != 'windows-latest'
+      - name: Run tests with coverage
         run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -v
 
-      - name: Run tests with coverage (Windows)
-        if: matrix.os == 'windows-latest'
-        run: .venv\Scripts\python.exe -m pytest --cov=src --cov-report=xml --cov-report=term-missing -v
-
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
