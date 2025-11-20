@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from src.core.interferometry import calculate_interferogram
 from src.core.psf import calculate_psf
-from src.core.zernike import calculate_rms
+from src.core.zernike import calculate_rms, calculate_ptv
 import os
 import json
 
@@ -62,6 +62,15 @@ class RoddierTestResultsWindow(QDialog):
         self.interferogram_params = None
         self.telescope_params = None
         self.img_avg = None
+        self.wavelength_nm = 555  # Por defecto
+        self.wavefront = None  # Para calcular PTV
+
+        # Cache for plot objects (optimization)
+        self._wavefront_im = None
+        self._wavefront_cbar = None
+        self._interferogram_im = None
+        self._psf_im = None
+        self._psf_cbar = None
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -130,6 +139,11 @@ class RoddierTestResultsWindow(QDialog):
         self.rms_label.setStyleSheet("font-weight: bold; font-size: 12pt; margin: 10px;")
         zernike_layout.addWidget(self.rms_label)
 
+        # Etiqueta para mostrar el PTV (Peak-to-Valley)
+        self.ptv_label = QLabel()
+        self.ptv_label.setStyleSheet("font-weight: bold; font-size: 12pt; margin: 10px;")
+        zernike_layout.addWidget(self.ptv_label)
+
         # Contenedor para el histograma (derecha)
         histogram_container = QWidget()
         histogram_layout = QVBoxLayout(histogram_container)
@@ -151,15 +165,18 @@ class RoddierTestResultsWindow(QDialog):
         button_layout.addWidget(close_button)
         layout.addLayout(button_layout)
 
-    def update_plots(self, zernike_coeffs, zernike_base, annular_mask, interferogram_params, telescope_params):
+    def update_plots(self, zernike_coeffs, zernike_base, annular_mask, interferogram_params, telescope_params, wavefront=None, wavelength_nm=555):
         self.zernike_coeffs = zernike_coeffs
         self.zernike_base = zernike_base
         self.annular_mask = annular_mask
         self.interferogram_params = interferogram_params
         self.telescope_params = telescope_params
+        self.wavefront = wavefront
+        self.wavelength_nm = wavelength_nm
 
         self._create_checkboxes()
         self._update_rms_display()
+        self._update_ptv_display()
         self._update_wavefront_plot()
         self._update_histogram()
 
@@ -174,7 +191,8 @@ class RoddierTestResultsWindow(QDialog):
 
         for i, coeff in enumerate(self.zernike_coeffs[:max_terms]):
             name = ZERN_NAMES[i] if i < len(ZERN_NAMES) else f"Z{i+1}"
-            label = f"Z{i+1} – {name} ({coeff:.3f})"
+            # Mostrar coeficiente en ondas (λ) - ya está en esas unidades
+            label = f"Z{i+1} – {name} ({coeff:.4f} λ)"
             cb = QCheckBox(label)
             cb.setChecked(i != 0)
             cb.stateChanged.connect(self._on_checkbox_changed)
@@ -226,11 +244,52 @@ class RoddierTestResultsWindow(QDialog):
         else:
             rms_value = 0.0
             
-        self.rms_label.setText(f"RMS (aberraciones activas, sin pistón): {rms_value:.4f}")
-    
+        # Convertir a otras unidades para mostrar
+        wavelength_mm = self.wavelength_nm / 1e6  # nm a mm
+        rms_um = rms_value * wavelength_mm * 1000  # λ a µm
+        rms_nm = rms_value * wavelength_mm * 1e6   # λ a nm
+
+        self.rms_label.setText(
+            f"RMS (sin pistón): {rms_value:.4f} λ ({rms_um:.2f} µm, {rms_nm:.1f} nm)"
+        )
+
+    def _update_ptv_display(self):
+        """Actualiza la etiqueta del PTV basado en el wavefront activo"""
+        if self.wavefront is None or self.annular_mask is None:
+            self.ptv_label.setText("PTV: No disponible")
+            return
+
+        try:
+            # Reconstruir el wavefront activo basado en los checkboxes seleccionados
+            active_wavefront = np.zeros_like(self.zernike_base[0])
+
+            max_terms = min(len(self.zernike_checks), 23)
+            for i, cb in enumerate(self.zernike_checks[:max_terms]):
+                if cb.isChecked():
+                    if i == 22:  # Último término (22) es la suma de los superiores
+                        for j in range(22, len(self.zernike_coeffs)):
+                            active_wavefront += self.zernike_coeffs[j] * self.zernike_base[j]
+                    else:
+                        active_wavefront += self.zernike_coeffs[i] * self.zernike_base[i]
+
+            # Calcular PTV del wavefront activo
+            ptv_value = calculate_ptv(active_wavefront, self.annular_mask)
+
+            # Convertir a otras unidades
+            wavelength_mm = self.wavelength_nm / 1e6  # nm a mm
+            ptv_um = ptv_value * wavelength_mm * 1000  # λ a µm
+            ptv_nm = ptv_value * wavelength_mm * 1e6   # λ a nm
+
+            self.ptv_label.setText(
+                f"PTV (Peak-to-Valley): {ptv_value:.4f} λ ({ptv_um:.2f} µm, {ptv_nm:.1f} nm)"
+            )
+        except Exception as e:
+            self.ptv_label.setText(f"PTV: Error al calcular ({str(e)})")
+
     def _on_checkbox_changed(self):
         """Callback cuando cambia el estado de un checkbox"""
         self._update_rms_display()
+        self._update_ptv_display()
         self._update_wavefront_plot()
 
     def _update_wavefront_plot(self):
@@ -261,30 +320,36 @@ class RoddierTestResultsWindow(QDialog):
             # Crear un array enmascarado
             active_contrib = np.ma.masked_array(active_contrib, mask=mask)
 
-
-        # Limpiar figura y ejes anteriores
-        self.wavefront_ax.clear()
-        self.wavefront_fig.clf()
-        self.wavefront_ax = self.wavefront_fig.add_subplot(111)
+        # Rotar la imagen 180 grados antes de mostrarla
+        wavefront_for_calc = np.ma.getdata(active_contrib)  # sin máscara, sin rotación
+        wavefront_for_display = np.flipud(active_contrib)   # solo para mostrar
 
         # Crear un mapa de colores personalizado que tenga blanco para valores enmascarados
         cmap = plt.cm.nipy_spectral
         cmap.set_bad('white')  # Establecer el color para valores enmascarados como blanco
 
-        # Rotar la imagen 180 grados antes de mostrarla
-        wavefront_for_calc = np.ma.getdata(active_contrib)  # sin máscara, sin rotación
-        wavefront_for_display = np.flipud(active_contrib)   # solo para mostrar
-        # Visualizar con escalas fijas simétricas
-        im = self.wavefront_ax.imshow(
-            wavefront_for_display,
-            origin='lower',
-            cmap=cmap,
-            aspect='equal'
-        )
+        # Optimización: reutilizar objetos existentes en lugar de recrear
+        if self._wavefront_im is None:
+            # Primera vez: crear todo
+            self.wavefront_ax.clear()
+            self._wavefront_im = self.wavefront_ax.imshow(
+                wavefront_for_display,
+                origin='lower',
+                cmap=cmap,
+                aspect='equal'
+            )
+            if self._wavefront_cbar is None:
+                self._wavefront_cbar = self.wavefront_fig.colorbar(self._wavefront_im, ax=self.wavefront_ax)
+            self.wavefront_ax.set_title("Suma de modos Zernike seleccionados")
+        else:
+            # Actualizar datos existentes (más rápido)
+            self._wavefront_im.set_data(wavefront_for_display)
+            self._wavefront_im.set_clim(vmin=wavefront_for_display.min(), vmax=wavefront_for_display.max())
+            if self._wavefront_cbar is not None:
+                self._wavefront_cbar.update_normal(self._wavefront_im)
 
-        self.wavefront_fig.colorbar(im, ax=self.wavefront_ax)
-        self.wavefront_ax.set_title("Suma de modos Zernike seleccionados")
-        self.wavefront_canvas.draw()
+        # Usar draw_idle() para mejor rendimiento
+        self.wavefront_canvas.draw_idle()
 
         # Actualizar el interferograma y la PSF
         self._update_interferogram_plot(wavefront_for_calc)
@@ -302,20 +367,23 @@ class RoddierTestResultsWindow(QDialog):
             self.annular_mask
         )
 
-        # Limpiar figura y ejes anteriores
-        self.interferogram_ax.clear()
-        self.interferogram_fig.clf()
-        self.interferogram_ax = self.interferogram_fig.add_subplot(111)
+        # Optimización: reutilizar objetos existentes
+        if self._interferogram_im is None:
+            # Primera vez: crear todo
+            self.interferogram_ax.clear()
+            self._interferogram_im = self.interferogram_ax.imshow(
+                interferogram,
+                cmap='gray',
+                aspect='equal'
+            )
+            self.interferogram_ax.set_title("Interferograma")
+        else:
+            # Actualizar datos existentes (más rápido)
+            self._interferogram_im.set_data(interferogram)
+            self._interferogram_im.set_clim(vmin=interferogram.min(), vmax=interferogram.max())
 
-        # Visualizar el interferograma
-        im = self.interferogram_ax.imshow(
-            interferogram,
-            cmap='gray',
-            aspect='equal'
-        )
-
-        self.interferogram_ax.set_title("Interferograma")
-        self.interferogram_canvas.draw()
+        # Usar draw_idle() para mejor rendimiento
+        self.interferogram_canvas.draw_idle()
 
     def _update_psf_plot(self, wavefront):
         if wavefront is None or self.annular_mask is None or self.telescope_params is None:
@@ -327,21 +395,27 @@ class RoddierTestResultsWindow(QDialog):
             self.annular_mask  # Usar la máscara anular como pupila
         )
 
-        # Limpiar figura y ejes anteriores
-        self.psf_ax.clear()
-        self.psf_fig.clf()
-        self.psf_ax = self.psf_fig.add_subplot(111)
+        # Optimización: reutilizar objetos existentes
+        if self._psf_im is None:
+            # Primera vez: crear todo
+            self.psf_ax.clear()
+            self._psf_im = self.psf_ax.imshow(
+                psf_log,  # Ya está en escala logarítmica
+                cmap='viridis',
+                aspect='equal'
+            )
+            self.psf_ax.set_title("PSF (escala logarítmica)")
+            if self._psf_cbar is None:
+                self._psf_cbar = self.psf_fig.colorbar(self._psf_im, ax=self.psf_ax)
+        else:
+            # Actualizar datos existentes (más rápido)
+            self._psf_im.set_data(psf_log)
+            self._psf_im.set_clim(vmin=psf_log.min(), vmax=psf_log.max())
+            if self._psf_cbar is not None:
+                self._psf_cbar.update_normal(self._psf_im)
 
-        # Visualizar la PSF en escala logarítmica
-        im = self.psf_ax.imshow(
-            psf_log,  # Ya está en escala logarítmica
-            cmap='viridis',
-            aspect='equal'
-        )
-
-        self.psf_ax.set_title("PSF (escala logarítmica)")
-        self.psf_fig.colorbar(im, ax=self.psf_ax)
-        self.psf_canvas.draw()
+        # Usar draw_idle() para mejor rendimiento
+        self.psf_canvas.draw_idle()
 
     def _on_psf_scroll(self, event):
         """Manejador del evento de scroll para hacer zoom en la PSF."""
@@ -366,8 +440,8 @@ class RoddierTestResultsWindow(QDialog):
         self.psf_ax.set_xlim(x_center - new_width/2, x_center + new_width/2)
         self.psf_ax.set_ylim(y_center - new_height/2, y_center + new_height/2)
 
-        # Redibujar el canvas
-        self.psf_canvas.draw()
+        # Redibujar el canvas (usar draw_idle para mejor rendimiento)
+        self.psf_canvas.draw_idle()
 
     def export_results(self):
         """Exporta los resultados a una carpeta con el nombre especificado."""
@@ -471,7 +545,7 @@ class RoddierTestResultsWindow(QDialog):
         # Configurar el histograma
         self.histogram_ax.set_xticks(range(max_terms))
         self.histogram_ax.set_xticklabels(names, rotation=45, ha='right', fontsize=8)
-        self.histogram_ax.set_ylabel("Coeficiente")
+        self.histogram_ax.set_ylabel("Coeficiente (λ)")
         self.histogram_ax.set_title("Coeficientes de Zernike")
         self.histogram_ax.grid(True, linestyle='--', alpha=0.7)
 

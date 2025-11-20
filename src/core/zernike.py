@@ -5,32 +5,21 @@ import numpy as np
 from scipy.special import factorial as fact
 
 
-def zernike_radial(n, m, rho):
-    """
-    Cálculo del polinomio radial Zernike R_n^m(rho)
-    """
-    R = np.zeros_like(rho)
-    m = abs(m)
-    for k in range((n - m) // 2 + 1):
-        coeff = ((-1) ** k * np.math.factorial(n - k)) / (
-            np.math.factorial(k)
-            * np.math.factorial((n + m) // 2 - k)
-            * np.math.factorial((n - m) // 2 - k)
-        )
-        R += coeff * rho ** (n - 2 * k)
-    return R
-
-
 def zernike_polynomials(shape, mask, R_out, center, max_terms=23):
     """
+    Genera la base de polinomios de Zernike ortonormalizados según el índice de Noll.
+
     Parámetros:
-    - shape: (alto, ancho) de la imagen
-    - mask: máscara binaria de la pupila (anular)
-    - center: (cx, cy) centro de la pupila
-    - max_order: orden máximo de los polinomios (por defecto 23)
+    - shape: tuple (alto, ancho) - Dimensiones de la imagen en píxeles
+    - mask: array 2D - Máscara binaria de la pupila (anular), valores 0 o 1
+    - R_out: float - Radio exterior de la pupila en píxeles
+    - center: tuple (cx, cy) - Centro de la pupila en píxeles
+    - max_terms: int - Número máximo de términos de Zernike a generar (por defecto 23)
 
     Retorna:
-    - base: lista de arrays 2D con los polinomios ortonormalizados
+    - base: array 3D - Array de forma (max_terms, height, width) con los polinomios
+            ortonormalizados según la convención de Noll. Normalización: sqrt(2(n+1))
+            para m≠0, sqrt(n+1) para m=0.
     """
     y, x = np.indices(shape)
     cy, cx = center
@@ -111,14 +100,20 @@ def fit_zernike(wavefront, mask, R_out, center, max_order=23):
     """Ajusta los coeficientes de Zernike al frente de onda.
 
     Args:
-        wavefront: array 2D con el frente de onda
-        mask: array 2D con la máscara
-        R_out: radio exterior de la pupila
-        center: centro de la pupila (y, x)
-        max_order: orden máximo de los polinomios (por defecto 23)
+        wavefront: array 2D con el frente de onda en longitudes de onda (λ)
+        mask: array 2D con la máscara binaria de la pupila (valores 0 o 1)
+        R_out: radio exterior de la pupila en píxeles
+        center: centro de la pupila (y, x) en píxeles
+        max_order: orden máximo de los polinomios de Zernike (por defecto 23)
 
     Returns:
         tuple: (coeficientes, base)
+            - coeficientes: array 1D con los coeficientes de Zernike en longitudes de onda (λ)
+            - base: array 3D con la base de polinomios de Zernike ortonormalizados
+
+    Nota:
+        Los coeficientes están en las mismas unidades que el wavefront de entrada.
+        Si el wavefront está en λ, los coeficientes estarán en λ.
     """
     # Validar entradas
     if wavefront is None or mask is None:
@@ -194,11 +189,15 @@ def calculate_rms(coefficients, exclude_piston=True):
     Calcula el RMS de los coeficientes de Zernike
 
     Args:
-        coefficients: array de coeficientes de Zernike
+        coefficients: array de coeficientes de Zernike en longitudes de onda (λ)
         exclude_piston: si True, excluye el término de pistón (Z1) del cálculo
 
     Returns:
-        float: valor RMS de los coeficientes
+        float: valor RMS de los coeficientes en longitudes de onda (λ)
+
+    Nota:
+        El RMS se calcula como: RMS = sqrt(mean(coeffs²))
+        Las unidades del resultado son las mismas que las de los coeficientes de entrada.
     """
     if exclude_piston and len(coefficients) > 1:
         # Excluir el primer coeficiente (pistón)
@@ -207,4 +206,49 @@ def calculate_rms(coefficients, exclude_piston=True):
         coeffs_for_rms = coefficients
 
     return np.sqrt(np.mean(coeffs_for_rms**2))
+
+
+def calculate_ptv(wavefront, mask):
+    """
+    Calcula el Peak-to-Valley (PTV) del frente de onda dentro de la pupila.
+
+    El PTV es la diferencia entre el valor máximo y mínimo del frente de onda
+    en la región válida de la pupila.
+
+    Args:
+        wavefront: array 2D con el frente de onda en longitudes de onda (λ)
+        mask: array 2D con la máscara binaria de la pupila (valores 0 o 1)
+
+    Returns:
+        float: valor PTV (Peak-to-Valley) en longitudes de onda (λ)
+
+    Raises:
+        ValueError: si wavefront o mask son None, o si no hay píxeles válidos en la máscara
+
+    Nota:
+        El PTV se calcula como: PTV = max(wavefront) - min(wavefront)
+        Solo se consideran los píxeles dentro de la pupila (mask == 1).
+        Las unidades del resultado son las mismas que las del wavefront de entrada.
+    """
+    if wavefront is None or mask is None:
+        raise ValueError("wavefront y mask no pueden ser None")
+
+    if not np.any(mask):
+        raise ValueError("La máscara debe tener al menos un píxel válido")
+
+    if wavefront.shape != mask.shape:
+        raise ValueError(
+            f"Las dimensiones del frente de onda {wavefront.shape} no coinciden con la máscara {mask.shape}"
+        )
+
+    # Extraer solo los valores dentro de la pupila
+    wavefront_masked = wavefront[mask > 0]
+
+    if len(wavefront_masked) == 0:
+        raise ValueError("No hay datos válidos después de aplicar la máscara")
+
+    # Calcular PTV
+    ptv = np.max(wavefront_masked) - np.min(wavefront_masked)
+
+    return ptv
 

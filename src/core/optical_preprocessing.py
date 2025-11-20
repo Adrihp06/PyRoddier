@@ -4,6 +4,22 @@ from src.common.utils import apply_mask, find_center
 import numpy as np
 
 def align_images(intra_img, extra_img):
+    """
+    Alinea dos imágenes usando correlación cruzada FFT.
+
+    Calcula el desplazamiento necesario para alinear la imagen extra-focal con la intra-focal
+    mediante correlación cruzada en el dominio de Fourier.
+
+    Parámetros:
+    - intra_img: array 2D - Imagen intra-focal de referencia
+    - extra_img: array 2D - Imagen extra-focal a alinear
+
+    Retorna:
+    - extra_aligned: array 2D - Imagen extra-focal alineada
+    - shift_values: array 1D - Vector de desplazamiento aplicado [dy, dx] en píxeles
+
+    Nota: Usa interpolación cúbica (order=3) para el desplazamiento subpíxel.
+    """
     corr = fftconvolve(intra_img, extra_img[::-1, ::-1], mode='same')
     max_corr_pos = np.array(np.unravel_index(np.argmax(corr), corr.shape))
     center = np.array(intra_img.shape) // 2
@@ -13,24 +29,74 @@ def align_images(intra_img, extra_img):
     return extra_aligned, shift_values
 
 def generate_annular_mask(intra, extra_aligned):
+    """
+    Genera una máscara anular basada en el umbral de intensidad de ambas imágenes.
+
+    Crea una máscara binaria combinando las regiones donde ambas imágenes superan
+    el 5% de su intensidad máxima.
+
+    Parámetros:
+    - intra: array 2D - Imagen intra-focal
+    - extra_aligned: array 2D - Imagen extra-focal alineada
+
+    Retorna:
+    - array 2D - Máscara binaria (booleana) donde ambas imágenes son válidas
+
+    Nota: Umbral fijo de 5% del máximo de cada imagen.
+    """
     valid_intra = intra > (0.05 * intra.max())
     valid_extra = extra_aligned > (0.05 * extra_aligned.max())
     return valid_intra & valid_extra
 
 def generate_perfect_annular_mask(cx, cy, R_in, R_out, img):
+    """
+    Genera una máscara anular perfecta (geométrica) centrada en (cx, cy).
+
+    Crea una máscara binaria definida por dos radios (interior y exterior) centrada
+    en un punto específico.
+
+    Parámetros:
+    - cx: float - Coordenada x del centro en píxeles
+    - cy: float - Coordenada y del centro en píxeles
+    - R_in: float - Radio interior del anillo en píxeles
+    - R_out: float - Radio exterior del anillo en píxeles
+    - img: array 2D - Imagen de referencia (solo para obtener dimensiones)
+
+    Retorna:
+    - array 2D - Máscara binaria (booleana): True donde R_in <= r <= R_out
+
+    Nota: Útil para pupila anular (telescopios con obstrucción central).
+    """
     y, x = np.indices(img.shape)
     r = np.sqrt((x - cx)**2 + (y - cy)**2)
     return (r >= R_in) & (r <= R_out)
 
 
 def estimate_radii(img, cx, cy, threshold=0.5):
+    """
+    Estima los radios interior y exterior de la pupila anular a partir de una imagen.
+
+    Calcula los radios del anillo de la pupila encontrando los píxeles que superan
+    un umbral de intensidad relativo.
+
+    Parámetros:
+    - img: array 2D - Imagen de la pupila
+    - cx: float - Coordenada x del centro en píxeles
+    - cy: float - Coordenada y del centro en píxeles
+    - threshold: float - Umbral relativo (0-1) respecto al máximo (default: 0.5)
+
+    Retorna:
+    - R_out: float - Radio exterior en píxeles (máximo)
+    - R_in: float - Radio interior en píxeles (mínimo)
+
+    Nota: Útil para telescopios con obstrucción central (diseño Cassegrain, etc.)
+    """
     max_val = img.max()
     mask = img > (threshold * max_val)
     y, x = np.indices(img.shape)
     r = np.sqrt((x - cx)**2 + (y - cy)**2)
     r_vals = r[mask]
     R_out = np.max(r_vals)
-
     R_in = np.min(r_vals)
     return R_out, R_in
 
