@@ -41,6 +41,7 @@ wheels/
 *.swo
 
 /images
+/reports
 .venv
 .coverage
 .vscode
