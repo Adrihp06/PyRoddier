@@ -52,8 +52,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: echo "QT_QPA_PLATFORM=offscreen" >> $GITHUB_ENV
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (non-Windows)
+        if: matrix.os != 'windows-latest'
         run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -v
+
+      - name: Run tests with coverage (Windows)
+        if: matrix.os == 'windows-latest'
+        run: .venv\Scripts\python.exe -m pytest --cov=src --cov-report=xml --cov-report=term-missing -v
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'

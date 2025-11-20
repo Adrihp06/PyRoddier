@@ -12,7 +12,8 @@
 - [El Test de Roddier](#el-test-de-roddier)
 - [Características Principales](#características-principales)
 - [Tecnologías Utilizadas](#tecnologías-utilizadas)
-- [Instalación](#instalación)
+- [Descarga Rápida (Para Usuarios Finales)](#-descarga-rápida-para-usuarios-finales)
+- [Instalación para Desarrollo](#-instalación-para-desarrollo)
 - [Uso de la Aplicación](#uso-de-la-aplicación)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Algoritmos Implementados](#algoritmos-implementados)
@@ -107,7 +108,21 @@ Donde:
 - **Algoritmo de Roddier** para cálculo de frente de onda
 - **Generación de PSF** mediante transformada de Fourier
 
-## 🚀 Instalación
+## 📦 Descarga Rápida (Para Usuarios Finales)
+
+**¿Solo quieres usar la aplicación?** No necesitas instalar Python ni dependencias.
+
+👉 **[Descarga el ejecutable para tu sistema operativo](https://github.com/Adrihp06/PyRoddier/releases/latest)**
+
+- 🪟 **Windows**: Descarga el ZIP, extrae y ejecuta
+- 🍎 **macOS**: Descarga el ZIP, extrae y abre la aplicación
+- 🐧 **Linux**: Descarga el TAR.GZ, extrae y ejecuta
+
+> **Nota**: Las instrucciones de instalación manual siguientes son **solo para desarrolladores** que quieran modificar el código fuente.
+
+---
+
+## 🚀 Instalación para Desarrollo
 
 ### Requisitos del Sistema
 - **Python 3.11 o superior**
@@ -155,14 +170,41 @@ uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<
 ```
 
 4. **Ejecutar la aplicación**:
+
+**macOS y Linux:**
 ```bash
 uv run python src/main.py
 ```
 
-### Instalación en Windows
+**Windows:**
+```powershell
+# Activar el entorno virtual y ejecutar
+.venv\Scripts\python.exe src\main.py
+```
 
-Debido a limitaciones en las versiones más recientes de PyQt5-Qt5 (que no tienen wheels para Windows),
-los usuarios de Windows necesitan instalar versiones específicas:
+### Instalación en Windows (Solo Desarrollo)
+
+> ⚠️ **Usuarios finales**: Si solo quieres usar la aplicación, [descarga el ejecutable](https://github.com/Adrihp06/PyRoddier/releases/latest) en lugar de seguir estas instrucciones.
+
+**Esta sección es solo para desarrolladores que quieran modificar el código en Windows.**
+
+Debido a limitaciones en PyQt5-Qt5 (no hay wheels para Windows en versiones recientes),
+los desarrolladores en Windows necesitan instalar versiones específicas.
+
+#### Opción 1: Script Automático (Recomendado)
+
+```powershell
+# Clonar el repositorio
+git clone https://github.com/Adrihp06/PyRoddier.git
+cd PyRoddier
+
+# Ejecutar script de instalación automática
+.\install_windows.ps1
+
+# El script instalará todo automáticamente
+```
+
+#### Opción 2: Instalación Manual
 
 ```powershell
 # Después de clonar el repositorio
@@ -175,11 +217,17 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 uv sync --all-extras --no-build
 uv pip install --force-reinstall "PyQt5==5.15.9" "PyQt5-Qt5==5.15.2" "PyQt5-sip<13,>=12.11"
 
-# Ejecutar
-uv run python src/main.py
+# Ejecutar (NO usar 'uv run' en Windows)
+.venv\Scripts\python.exe src\main.py
+
+# Para ejecutar tests
+.venv\Scripts\python.exe -m pytest
 ```
 
-**Alternativa**: Usar WSL2 (Windows Subsystem for Linux) para evitar problemas de compatibilidad.
+> **⚠️ Importante**: En Windows, NO uses `uv run` después de la instalación manual de PyQt5.
+> Usa directamente el Python del entorno virtual (`.venv\Scripts\python.exe`).
+
+**Alternativa**: Usar WSL2 (Windows Subsystem for Linux) para una experiencia sin problemas.
 Ver `docs/WINDOWS_INSTALL.md` para más detalles.
 
 ### Instalación Tradicional (pip)
